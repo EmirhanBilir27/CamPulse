@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CamPulse - Kampüs Etkinlik & Kulüp Senkronizasyonu</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#151f32', 900: '#0f172a', 800: '#1e293b', 700: '#334155' },
+                        indigo: { 500: '#6366f1', 600: '#4f46e5' },
+                        cyan: { 400: '#38bdf8', 500: '#06b6d4' }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icon Set -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-white">
+
+    <!-- ÜST BİLGİ & UYGULAMA BAR-I -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-30 px-4 py-3">
+        <div class="max-w-4xl mx-auto flex items-center justify-between">
+            <!-- Logo -->
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <i class="fa-solid fa-wave-square text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-tight">Cam<span class="text-cyan-400">Pulse</span></h1>
+                    <p class="text-[10px] text-slate-400 font-medium">Akıllı Kulüp Koordinasyon Sistemi</p>
+                </div>
+            </div>
+
+            <!-- Mod Değiştirici (Öğrenci / Kulüp Yöneticisi) -->
+            <div class="flex items-center bg-slate-800 p-1 rounded-full border border-slate-700">
+                <button id="modeStudentBtn" onclick="setMode(false)" class="px-3 py-1 rounded-full text-xs font-bold transition-all bg-indigo-600 text-white shadow">
+                    <i class="fa-solid fa-graduation-cap mr-1"></i> Öğrenci
+                </button>
+                <button id="modeLeaderBtn" onclick="setMode(true)" class="px-3 py-1 rounded-full text-xs font-bold transition-all text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-user-shield mr-1"></i> Yönetici
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ANA İÇERİK -->
+    <main class="max-w-4xl mx-auto w-full flex-1 px-4 py-6 space-y-6">
+
+        <!-- ARAMA BAR-I -->
+        <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-400"></i>
+            <input type="text" id="searchInput" oninput="renderEvents()" placeholder="Etkinlik adı, kulüp veya amfi ara..." 
+                class="w-full bg-slate-800 border border-slate-700 rounded-2xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-500">
+        </div>
+
+        <!-- HAFTALIK GÜN ŞERİDİ -->
+        <div class="flex space-x-2 overflow-x-auto no-scrollbar pb-1" id="daysList">
+            <!-- JS ile gün butonları dolacak -->
+        </div>
+
+        <!-- KATEGORİ FİLTRELERİ -->
+        <div class="flex space-x-2 overflow-x-auto no-scrollbar" id="categoriesList">
+            <!-- JS ile kategoriler dolacak -->
+        </div>
+
+        <!-- YÖNETİCİ MODU ÖZEL DUYURU BANNERI (Gizli başlar) -->
+        <div id="leaderBanner" class="hidden bg-indigo-950/40 border border-indigo-500/30 rounded-2xl p-4 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2.5 bg-indigo-600/20 text-indigo-400 rounded-xl">
+                    <i class="fa-solid fa-plus-circle text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-indigo-200">Kulüp Yöneticisi Paneli Aktif</h3>
+                    <p class="text-xs text-indigo-300/70">Düzenleyeceğiniz etkinlik saatini girerek çakışmaları önleyin.</p>
+                </div>
+            </div>
+            <button onclick="openAddModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-600/30 whitespace-nowrap">
+                + Etkinlik Yükle
+            </button>
+        </div>
+
+        <!-- ETKİNLİK LİSTESİ -->
+        <div class="space-y-4" id="eventsContainer">
+            <!-- JS ile Etkinlik Kartları Render Olacak -->
+        </div>
+    </main>
+
+    <!-- BİLDİRİM / TOAST UYARISI -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-emerald-500 text-white font-semibold text-sm px-4 py-3 rounded-xl shadow-2xl transition-all transform translate-y-20 opacity-0 pointer-events-none z-50 flex items-center space-x-2">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="toastMsg">İşlem başarılı!</span>
+    </div>
+
+    <!-- ETKİNLİK DETAY MODAL -->
+    <div id="detailModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative">
+            <button onclick="closeDetailModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div id="modalCategory" class="inline-block px-3 py-1 bg-cyan-500/10 text-cyan-400 text-xs font-bold rounded-lg">Kategori</div>
+            <h2 id="modalTitle" class="text-xl font-bold text-white">Etkinlik Başlığı</h2>
+            <p id="modalClub" class="text-sm text-slate-400 font-medium">Kulüp Adı</p>
+            
+            <div class="flex items-center space-x-3 text-xs">
+                <span class="bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg text-cyan-400 font-mono">
+                    <i class="fa-regular fa-clock mr-1"></i> <span id="modalTime">14:00 - 15:30</span>
+                </span>
+                <span class="bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg text-slate-300">
+                    <i class="fa-solid fa-location-dot mr-1 text-slate-400"></i> <span id="modalLocation">113</span>
+                </span>
+            </div>
+
+            <div class="bg-slate-900/50 p-4 rounded-2xl border border-slate-700/50">
+                <p class="text-xs font-bold text-slate-400 mb-1">Etkinlik Açıklaması:</p>
+                <p id="modalDesc" class="text-sm text-slate-300 leading-relaxed">Açıklama metni buraya gelecek.</p>
+            </div>
+
+            <div id="modalConflictBox" class="hidden bg-red-500/10 border border-red-500/30 p-3.5 rounded-2xl text-xs text-red-300">
+                <p class="font-bold mb-1 flex items-center"><i class="fa-solid fa-triangle-exclamation mr-1.5 text-red-400"></i> Saat Çakışması Tespit Edildi!</p>
+                <p id="modalConflictText">Takviminizdeki diğer etkinliklerle saatleri örtüşüyor.</p>
+            </div>
+
+            <button id="modalJoinBtn" onclick="" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/30">
+                Haftalık Takvimime Ekle
+            </button>
+        </div>
+    </div>
+
+    <!-- ETKİNLİK EKLEME MODAL (Yöneticiler İçin) -->
+    <div id="addModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative">
+            <button onclick="closeAddModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-calendar-plus text-indigo-400 mr-2"></i>Yeni Kulüp Etkinliği Yükle</h2>
+            
+            <form id="addEventForm" onsubmit="handleAddEvent(event)" class="space-y-3">
+                <div>
+                    <label class="text-xs font-bold text-slate-400">Etkinlik / Kurs Başlığı</label>
+                    <input type="text" id="addTitle" required placeholder="Örn: C++ ile Veri Yapıları" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 mt-1">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-slate-400">Kulüp Adı</label>
+                        <input type="text" id="addClub" required value="Yazılım & Bilişim Kulübü" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-400">Konum (Derslik)</label>
+                        <input type="text" id="addLocation" required placeholder="Örn: Amfi 2" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 mt-1">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-slate-400">Kategori</label>
+                        <select id="addCategory" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 mt-1">
+                            <option>Yazılım & Teknoloji</option>
+                            <option>Kariyer</option>
+                            <option>Sanat & Müzik</option>
+                            <option>Spor</option>
+                            <option>Sosyal Sorumluluk</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-400">Gün</label>
+                        <select id="addDayIndex" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 mt-1">
+                            <option value="1">Pazartesi</option>
+                            <option value="2">Salı</option>
+                            <option value="3">Çarşamba</option>
+                            <option value="4">Perşembe</option>
+                            <option value="5">Cuma</option>
+                            <option value="6">Cumartesi</option>
+                            <option value="7">Pazar</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-slate-400">Başlangıç Saati</label>
+                        <input type="time" id="addStartTime" required value="14:00" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-400">Bitiş Saati</label>
+                        <input type="time" id="addEndTime" required value="15:30" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 mt-1">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold text-slate-400">Açıklama</label>
+                    <textarea id="addDesc" rows="2" placeholder="Etkinlik içeriği hakkında kısa bilgi..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 mt-1"></textarea>
+                </div>
+
+                <button type="submit" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/30">
+                    Sisteme Yayınla
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT MANTIĞI VE ÇAKIŞMA TESPİT MOTORU -->
+    <script>
+        const days = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+        const categories = ['Tümü', 'Yazılım & Teknoloji', 'Kariyer', 'Sanat & Müzik', 'Spor', 'Sosyal Sorumluluk'];
+
+        let selectedDayIndex = 1;
+        let selectedCategory = 'Tümü';
+        let isLeaderMode = false;
+
+        // Başlangıç Mock Verileri
+        let events = [
+            {
+                id: '1',
+                title: 'C++ ile Algoritma ve Veri Yapıları Kursu',
+                clubName: 'YAZEK kulübü',
+                category: 'Yazılım & Teknoloji',
+                location: '113 (Mühendislik Fak.)',
+                dayIndex: 1,
+                startStr: '14:00',
+                endStr: '15:30',
+                startVal: 14.0,
+                endVal: 15.5,
+                description: '1. sınıflar için özel hazırlanan temel C++ eğitimi ve canlı kodlama pratiği.',
+                isJoined: true
+            },
+            {
+                id: '2',
+                title: 'Yapay Zekâya Giriş ve Python Atölyesi',
+                clubName: 'Bilgisayar kulübü',
+                category: 'Yazılım & Teknoloji',
+                location: '204 (mühendislik fak.)',
+                dayIndex: 1,
+                startStr: '15:00',
+                endStr: '16:30',
+                startVal: 15.0,
+                endVal: 16.5,
+                description: 'Machine Learning konseptlerine hızlı başlangıç ve model eğitimi.',
+                isJoined: false
+            },
+            {
+                id: '3',
+                title: 'Sektör Liderleriyle Kariyer Söyleşisi',
+                clubName: 'Kariyer ve Girişimcilik Kulübü',
+                category: 'Kariyer',
+                location: 'Rek. Konferans Salonu',
+                dayIndex: 1,
+                startStr: '16:00',
+                endStr: '17:30',
+                startVal: 16.0,
+                endVal: 17.5,
+                description: 'Staj ve mezuniyet sonrası iş fırsatları üzerine soru-cevap oturumu.',
+                isJoined: false
+            },
+            {
+                id: '4',
+                title: 'Gitar Ritme Giriş Çalışması',
+                clubName: 'Müzik Kulübü',
+                category: 'Sanat & Müzik',
+                location: 'Öğrenci Merkezi Müzik Odası',
+                dayIndex: 2,
+                startStr: '17:00',
+                endStr: '18:30',
+                startVal: 17.0,
+                endVal: 18.5,
+                description: 'Temel akorlar ve ritim kalıpları eğitimi.',
+                isJoined: false
+            }
+        ];
+
+        // Sayfa Yüklendiğinde Başlat
+        window.onload = () => {
+            renderDays();
+            renderCategories();
+            renderEvents();
+        };
+
+        // Günleri Render Et
+        function renderDays() {
+            const container = document.getElementById('daysList');
+            container.innerHTML = days.map((day, idx) => {
+                const dayNum = idx + 1;
+                const active = dayNum === selectedDayIndex;
+                return `
+                    <button onclick="setDay(${dayNum})" class="px-5 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
+                        active 
+                        ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-500/25 border border-indigo-400/30' 
+                        : 'bg-slate-800 text-slate-400 border border-slate-700/60 hover:border-slate-600 hover:text-slate-200'
+                    }">
+                        ${day}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        // Kategorileri Render Et
+        function renderCategories() {
+            const container = document.getElementById('categoriesList');
+            container.innerHTML = categories.map(cat => {
+                const active = cat === selectedCategory;
+                return `
+                    <button onclick="setCategory('${cat}')" class="px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${
+                        active 
+                        ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/40 font-bold' 
+                        : 'bg-slate-900 text-slate-500 border border-slate-800 hover:text-slate-300'
+                    }">
+                        ${cat}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        // Akıllı Çakışma Tespit Motoru
+        function getConflicts(targetEv) {
+            let conflicts = [];
+            events.forEach(ev => {
+                if (ev.id === targetEv.id) return;
+                if (ev.dayIndex !== targetEv.dayIndex) return;
+                if (!ev.isJoined) return; // Sadece öğrencinin takvimindekilerle kıyasla
+
+                // Matematiksel Çakışma Koşulu: (StartA < EndB) AND (EndA > StartB)
+                const overlaps = (targetEv.startVal < ev.endVal) && (targetEv.endVal > ev.startVal);
+                if (overlaps) {
+                    conflicts.push(`${ev.clubName} (${ev.title})`);
+                }
+            });
+            return conflicts;
+        }
+
+        // Etkinlikleri Listele
+        function renderEvents() {
+            const container = document.getElementById('eventsContainer');
+            const query = document.getElementById('searchInput').value.toLowerCase();
+
+            const filtered = events.filter(ev => {
+                const matchesDay = ev.dayIndex === selectedDayIndex;
+                const matchesCat = selectedCategory === 'Tümü' || ev.category === selectedCategory;
+                const matchesSearch = ev.title.toLowerCase().includes(query) || 
+                                      ev.clubName.toLowerCase().includes(query) || 
+                                      ev.location.toLowerCase().includes(query);
+                return matchesDay && matchesCat && matchesSearch;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 bg-slate-800/40 rounded-3xl border border-dashed border-slate-700/60">
+                        <i class="fa-solid fa-calendar-xmark text-4xl text-slate-600 mb-3"></i>
+                        <p class="text-sm font-semibold text-slate-400">Bu kriterlere uygun etkinlik bulunamadı.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filtered.map(ev => {
+                const conflicts = getConflicts(ev);
+                const hasClash = conflicts.length > 0 && ev.isJoined;
+
+                return `
+                    <div class="bg-slate-800 hover:bg-slate-800/80 transition-all rounded-3xl p-5 border ${
+                        hasClash 
+                        ? 'border-red-500/80 bg-red-950/10' 
+                        : (ev.isJoined ? 'border-emerald-500/50' : 'border-slate-700/60')
+                    } space-y-3 relative group">
+                        
+                        <!-- Üst Bar: Saat ve Çakışma Rozeti -->
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-mono font-bold text-cyan-400 bg-cyan-950/40 border border-cyan-500/20 px-2.5 py-1 rounded-lg">
+                                <i class="fa-regular fa-clock mr-1"></i> ${ev.startStr} - ${ev.endStr}
+                            </span>
+                            
+                            ${hasClash ? `
+                                <span class="text-[11px] font-bold text-red-400 bg-red-500/15 border border-red-500/30 px-2.5 py-1 rounded-lg flex items-center animate-pulse">
+                                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> Saat Çakışması!
+                                </span>
+                            ` : ''}
+                        </div>
+
+                        <!-- Başlık ve Kulüp -->
+                        <div onclick="openDetailModal('${ev.id}')" class="cursor-pointer space-y-1">
+                            <h3 class="font-bold text-base text-white group-hover:text-cyan-300 transition-colors">${ev.title}</h3>
+                            <p class="text-xs text-slate-400 font-medium">${ev.clubName}</p>
+                        </div>
+
+                        <!-- Alt Bar: Konum ve Katıl Butonu -->
+                        <div class="flex items-center justify-between pt-2 border-t border-slate-700/50 text-xs">
+                            <span class="text-slate-400">
+                                <i class="fa-solid fa-location-dot text-slate-500 mr-1"></i> ${ev.location}
+                            </span>
+                            
+                            <button onclick="toggleJoin('${ev.id}')" class="px-3.5 py-1.5 rounded-xl font-bold transition-all flex items-center space-x-1.5 ${
+                                ev.isJoined 
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25' 
+                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                            }">
+                                <i class="fa-solid ${ev.isJoined ? 'fa-bookmark' : 'fa-bookmark-slash'}"></i>
+                                <span>${ev.isJoined ? 'Takvimimde' : 'Takvime Ekle'}</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Filtre Buton Aksiyonları
+        function setDay(index) {
+            selectedDayIndex = index;
+            renderDays();
+            renderEvents();
+        }
+
+        function setCategory(cat) {
+            selectedCategory = cat;
+            renderCategories();
+            renderEvents();
+        }
+
+        function setMode(isLeader) {
+            isLeaderMode = isLeader;
+            const sBtn = document.getElementById('modeStudentBtn');
+            const lBtn = document.getElementById('modeLeaderBtn');
+            const banner = document.getElementById('leaderBanner');
+
+            if (isLeader) {
+                sBtn.className = "px-3 py-1 rounded-full text-xs font-bold transition-all text-slate-400 hover:text-white";
+                lBtn.className = "px-3 py-1 rounded-full text-xs font-bold transition-all bg-amber-500 text-slate-950 shadow";
+                banner.classList.remove('hidden');
+            } else {
+                sBtn.className = "px-3 py-1 rounded-full text-xs font-bold transition-all bg-indigo-600 text-white shadow";
+                lBtn.className = "px-3 py-1 rounded-full text-xs font-bold transition-all text-slate-400 hover:text-white";
+                banner.classList.add('hidden');
+            }
+        }
+
+        function toggleJoin(id) {
+            const ev = events.find(e => e.id === id);
+            if (!ev) return;
+            ev.isJoined = !ev.isJoined;
+            renderEvents();
+            showToast(ev.isJoined ? `Takvime Eklendi: ${ev.title}` : `Takvimden Çıkarıldı: ${ev.title}`);
+        }
+
+        function timeToVal(timeStr) {
+            const [h, m] = timeStr.split(':').map(Number);
+            return h + (m / 60.0);
+        }
+
+        // Modal İşlemleri
+        function openDetailModal(id) {
+            const ev = events.find(e => e.id === id);
+            if (!ev) return;
+
+            document.getElementById('modalCategory').innerText = ev.category;
+            document.getElementById('modalTitle').innerText = ev.title;
+            document.getElementById('modalClub').innerText = `Düzenleyen: ${ev.clubName}`;
+            document.getElementById('modalTime').innerText = `${ev.startStr} - ${ev.endStr}`;
+            document.getElementById('modalLocation').innerText = ev.location;
+            document.getElementById('modalDesc').innerText = ev.description;
+
+            const conflicts = getConflicts(ev);
+            const conflictBox = document.getElementById('modalConflictBox');
+            if (conflicts.length > 0) {
+                conflictBox.classList.remove('hidden');
+                document.getElementById('modalConflictText').innerText = `Şu etkinlikle çakışıyor: ${conflicts.join(', ')}`;
+            } else {
+                conflictBox.classList.add('hidden');
+            }
+
+            const btn = document.getElementById('modalJoinBtn');
+            btn.innerText = ev.isJoined ? 'Haftalık Takvimimden Çıkar' : 'Haftalık Takvimime Ekle';
+            btn.className = `w-full py-3.5 font-bold rounded-xl transition-all shadow-lg ${
+                ev.isJoined ? 'bg-slate-700 hover:bg-slate-600 text-slate-200' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
+            }`;
+            btn.onclick = () => {
+                toggleJoin(ev.id);
+                closeDetailModal();
+            };
+
+            document.getElementById('detailModal').classList.remove('hidden');
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.add('hidden');
+        }
+
+        function openAddModal() {
+            document.getElementById('addModal').classList.remove('hidden');
+        }
+
+        function closeAddModal() {
+            document.getElementById('addModal').classList.add('hidden');
+        }
+
+        function handleAddEvent(e) {
+            e.preventDefault();
+            const startStr = document.getElementById('addStartTime').value;
+            const endStr = document.getElementById('addEndTime').value;
+
+            const newEv = {
+                id: Date.now().toString(),
+                title: document.getElementById('addTitle').value,
+                clubName: document.getElementById('addClub').value,
+                location: document.getElementById('addLocation').value,
+                category: document.getElementById('addCategory').value,
+                dayIndex: Number(document.getElementById('addDayIndex').value),
+                startStr: startStr,
+                endStr: endStr,
+                startVal: timeToVal(startStr),
+                endVal: timeToVal(endStr),
+                description: document.getElementById('addDesc').value || 'Açıklama girilmedi.',
+                isJoined: true
+            };
+
+            events.push(newEv);
+            selectedDayIndex = newEv.dayIndex;
+            renderDays();
+            renderEvents();
+            closeAddModal();
+            showToast('Yeni etkinlik başarıyla sisteme eklendi!');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+            }, 2500);
+        }
+    </script>
+</body>
+</html>
