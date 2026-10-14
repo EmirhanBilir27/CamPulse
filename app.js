@@ -13,7 +13,12 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Yönetici (Admin) Yetkisine Sahip E-Posta
-const ADMIN_EMAIL = 'emirhanbilir947@gmail.com';
+// BUNU EKLE:
+const ADMIN_EMAILS = [
+    'emirhanbilir947@gmail.com', 
+    'osamaalhajomar7@gmail.com',
+    'feyzafatallah71@gmail.com'
+];
 
 
 // ==========================================
@@ -144,7 +149,7 @@ function showMainScreen(user) {
 
     // GÜVENLİK KONTROLÜ: SADECE ADMIN E-POSTASI İSE PANELİ GÖSTER
     const adminPanel = document.getElementById('admin-panel');
-    if (user.email === ADMIN_EMAIL) {
+    if (ADMIN_EMAILS.includes(user.email)) {
         adminPanel.style.display = 'block';
     } else {
         adminPanel.style.display = 'none';
@@ -370,7 +375,7 @@ function renderEvents() {
         }
 
         const isJoined = APP_STATE.joinedEvents.includes(ev.id);
-        const isAdmin = APP_STATE.currentUser && APP_STATE.currentUser.email === ADMIN_EMAIL;
+        const isAdmin = APP_STATE.currentUser && ADMIN_EMAILS.includes(APP_STATE.currentUser.email);
 
         // Kart Şablonu
         return `
