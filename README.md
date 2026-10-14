@@ -39,8 +39,6 @@
 
 Sistem, öğrencinin takvimine eklediği etkinlikler arasında matematiksel olarak zaman çakışması olup olmadığını aşağıdaki algoritma ile kontrol eder:
 
-$$\text{Çakışma Var} \iff (\text{Başlangıç}_A < \text{Bitiş}_B) \land (\text{Bitiş}_A > \text{Başlangıç}_B)$$
-
 ```javascript
 // Çakışma Kontrol Fonksiyonu Örneği
 function getConflicts(targetEv) {
