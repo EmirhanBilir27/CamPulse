@@ -18,6 +18,7 @@ const ADMIN_EMAILS = [
     'osamaalhajomar7@gmail.com',
     'emircicek73@gmail.com',
     'abdulsametisan177@gmail.com',
+    'ma9034403@gmail.com',
     'feyzafatallah71@gmail.com'
 ];
 
