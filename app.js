@@ -16,6 +16,8 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 const ADMIN_EMAILS = [
     'emirhanbilir947@gmail.com', 
     'osamaalhajomar7@gmail.com',
+    'emircicek73@gmail.com',
+    'abdulsametisan177@gmail.com',
     'feyzafatallah71@gmail.com'
 ];
 
@@ -25,10 +27,10 @@ const ADMIN_EMAILS = [
 // ==========================================
 const APP_STATE = {
     days: ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'],
-    selectedDayIndex: 1,      // 1 = Pazartesi, 2 = Salı...
+    selectedDayIndex: 0,      // 0 = Tümü, 1 = Pazartesi, 2 = Salı...
     activeTab: 'all',         // 'all' (Tüm Etkinlikler) veya 'my-events' (Etkinliklerim)
     events: [],               // Veritabanından çekilen ham etkinlikler
-    joinedEvents: [],         // Kullanıcının katıldığı etkinlik ID'leri (LocalStorage)
+    joinedEvents: [],         // Kullanıcının katıldığı etkinlik ID'leri (Bulut Senkronize)
     currentUser: null         // Aktif oturum sahibi kullanıcı
 };
 
@@ -69,7 +71,12 @@ async function register() {
     
     const { data, error } = await supabaseClient.auth.signUp({ 
         email: email, 
-        password: password 
+        password: password,
+        options: {
+            data: {
+                joinedEvents: [] // Yeni kullanıcı için boş takvim oluştur
+            }
+        }
     });
     
     setAuthLoading('register', false);
@@ -143,7 +150,7 @@ function showMainScreen(user) {
         adminPanel.style.display = 'none';
     }
 
-    // Katılınan etkinlikleri yerel hafızadan yükle
+    // Katılınan etkinlikleri buluttan/yerel hafızadan yükle
     loadJoinedEvents();
 
     renderDays();
@@ -273,7 +280,7 @@ async function deleteEvent(id, title) {
         if (card) card.style.opacity = '1';
         showToast("Silinemedi: Sadece yönetici etkinlik silebilir.", "error");
     } else {
-        // Takvim listesinden de çıkar
+        // Takvim listesinden de çıkar ve buluta kaydet
         const idx = APP_STATE.joinedEvents.indexOf(id);
         if (idx > -1) {
             APP_STATE.joinedEvents.splice(idx, 1);
@@ -291,7 +298,23 @@ async function deleteEvent(id, title) {
 
 function renderDays() {
     const container = document.getElementById('daysList');
-    container.innerHTML = APP_STATE.days.map((day, idx) => {
+    
+    let html = '';
+    
+    // Tümü Butonu
+    const isAllActive = APP_STATE.selectedDayIndex === 0;
+    html += `
+        <button onclick="setDay(0)" class="flex-1 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
+            isAllActive 
+            ? 'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)] border border-indigo-400/30' 
+            : 'bg-slate-800/90 text-slate-400 border border-slate-700/60 hover:border-slate-600 hover:text-slate-200'
+        }">
+            Tümü
+        </button>
+    `;
+
+    // Günler Butonları
+    html += APP_STATE.days.map((day, idx) => {
         const dayNum = idx + 1;
         const active = dayNum === APP_STATE.selectedDayIndex;
         return `
@@ -304,6 +327,8 @@ function renderDays() {
             </button>
         `;
     }).join('');
+
+    container.innerHTML = html;
 }
 
 function renderEvents() {
@@ -315,12 +340,23 @@ function renderEvents() {
     if (APP_STATE.activeTab === 'all') {
         filtered = APP_STATE.events.filter(ev => {
             const parsed = parseEventData(ev);
-            const matchesDay = parsed.dayIndex === APP_STATE.selectedDayIndex;
+            // Eğer 0 ise (Tümü), gün kontrolünü es geç
+            const matchesDay = APP_STATE.selectedDayIndex === 0 ? true : parsed.dayIndex === APP_STATE.selectedDayIndex;
             const matchesSearch = ev.title.toLowerCase().includes(query) || 
                                   parsed.pureDesc.toLowerCase().includes(query) ||
                                   parsed.clubName.toLowerCase().includes(query);
             return matchesDay && matchesSearch;
         });
+
+        // "Tümü" seçiliyse veya arama yapılıyorsa etkinlikleri Gün ve Saate göre sırala
+        if (APP_STATE.selectedDayIndex === 0 || query.length > 0) {
+            filtered.sort((a, b) => {
+                const pA = parseEventData(a);
+                const pB = parseEventData(b);
+                if (pA.dayIndex !== pB.dayIndex) return pA.dayIndex - pB.dayIndex;
+                return pA.startVal - pB.startVal;
+            });
+        }
     } else {
         // "Etkinliklerim" sekmesi: Sadece takvime katılanları listele
         filtered = APP_STATE.events.filter(ev => {
@@ -364,10 +400,13 @@ function renderEvents() {
         const isJoined = APP_STATE.joinedEvents.includes(ev.id);
         const isAdmin = APP_STATE.currentUser && ADMIN_EMAILS.includes(APP_STATE.currentUser.email);
         
-        // ÇAKIŞMA KONTROLÜ: SADECE TAKVİME EKLENEN VE ÇAKIŞAN ETKİNLİKLERDE
+        // ÇAKIŞMA KONTROLÜ
         const hasConflict = isJoined && checkEventConflict(ev.id);
 
         const dayName = APP_STATE.days[parsed.dayIndex - 1] || 'Günü Belirtilmedi';
+        
+        // Etkinliklerim sekmesindeyken VEYA Tümü (0) seçiliyken gün rozetini göster
+        const showDayBadge = APP_STATE.activeTab === 'my-events' || APP_STATE.selectedDayIndex === 0;
 
         return `
             <div id="event-card-${ev.id}" 
@@ -386,7 +425,7 @@ function renderEvents() {
                             <span class="inline-block text-[10px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-md border border-indigo-500/20">
                                 ${escapeHtml(parsed.clubName)}
                             </span>
-                            ${APP_STATE.activeTab === 'my-events' ? `
+                            ${showDayBadge ? `
                                 <span class="inline-block text-[10px] font-bold text-cyan-300 bg-cyan-500/10 px-2.5 py-0.5 rounded-md border border-cyan-500/20">
                                     <i class="fa-regular fa-calendar mr-1"></i>${dayName}
                                 </span>
@@ -445,7 +484,6 @@ function renderEvents() {
 // ==========================================
 
 function handleCardClick(event, eventId) {
-    // Buton tıklamaları haricinde kartın genelini tıklayınca modal aç
     openEventModal(eventId);
 }
 
@@ -464,7 +502,6 @@ function openEventModal(eventId) {
     document.getElementById('modalLocation').innerText = parsed.location;
     document.getElementById('modalDescription').innerText = parsed.pureDesc;
 
-    // Rozetler
     const badgesContainer = document.getElementById('modalBadges');
     badgesContainer.innerHTML = `
         <span class="text-[11px] font-black uppercase text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-md border border-indigo-500/20">
@@ -472,7 +509,6 @@ function openEventModal(eventId) {
         </span>
     `;
 
-    // Çakışma Uyarısı Gösterimi
     const alertBox = document.getElementById('modalConflictAlert');
     if (hasConflict) {
         alertBox.classList.remove('hidden');
@@ -480,7 +516,6 @@ function openEventModal(eventId) {
         alertBox.classList.add('hidden');
     }
 
-    // Aksiyon Butonu
     const actionContainer = document.getElementById('modalActionContainer');
     actionContainer.innerHTML = `
         <button id="modalJoinBtn" onclick="toggleJoin('${ev.id}')" class="px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg ${
@@ -505,7 +540,6 @@ function closeEventModal() {
     currentModalEventId = null;
 }
 
-// Modal arka planına tıklayınca kapatma
 document.getElementById('eventDetailModal')?.addEventListener('click', (e) => {
     if (e.target.id === 'eventDetailModal') {
         closeEventModal();
@@ -537,10 +571,9 @@ function toggleJoin(eventId) {
         newlyAdded = true;
     }
     
-    saveJoinedEvents();
+    saveJoinedEvents(); // Buluta kaydet!
     updateJoinedBadge();
 
-    // Sadece yeni eklendiyse ve saat çakışması varsa uyarı bildirimi ver
     if (newlyAdded) {
         if (checkEventConflict(eventId)) {
             showToast('Takvime eklendi, fakat başka bir etkinlikle saat çakışması var! ⚠️', 'warning');
@@ -551,13 +584,11 @@ function toggleJoin(eventId) {
 
     renderEvents();
 
-    // Eğer detay modalı açıksa, buton durumunu güncelle
     if (currentModalEventId === eventId) {
         openEventModal(eventId);
     }
 }
 
-// Sadece takvime katılım yapılmış etkinlikler arasında aynı gün ve çakışan saat kontrolü
 function checkEventConflict(targetEventId) {
     if (!APP_STATE.joinedEvents.includes(targetEventId)) return false;
 
@@ -574,9 +605,7 @@ function checkEventConflict(targetEventId) {
 
         const otherParsed = parseEventData(otherEv);
 
-        // Aynı gündeler mi?
         if (targetParsed.dayIndex === otherParsed.dayIndex) {
-            // Saat aralıkları çakışıyor mu? (Start1 < End2 AND End1 > Start2)
             if (targetParsed.startVal < otherParsed.endVal && targetParsed.endVal > otherParsed.startVal) {
                 return true;
             }
@@ -593,24 +622,51 @@ function updateJoinedBadge() {
     }
 }
 
+// Cihazlar arası senkronizasyon için etkinlikleri yükler
 function loadJoinedEvents() {
     if (!APP_STATE.currentUser) return;
-    const saved = localStorage.getItem(`campulse_joined_${APP_STATE.currentUser.id}`);
-    if (saved) {
-        try { 
-            APP_STATE.joinedEvents = JSON.parse(saved); 
-        } catch (e) { 
-            APP_STATE.joinedEvents = []; 
-        }
+    
+    // 1. Önce buluttan (Supabase User Metadata) yüklemeyi dener
+    const metadata = APP_STATE.currentUser.user_metadata;
+    if (metadata && metadata.joinedEvents && Array.isArray(metadata.joinedEvents)) {
+        APP_STATE.joinedEvents = metadata.joinedEvents;
+        // Offline cache için locale de yazar
+        localStorage.setItem(`campulse_joined_${APP_STATE.currentUser.id}`, JSON.stringify(APP_STATE.joinedEvents));
     } else {
-        APP_STATE.joinedEvents = [];
+        // 2. Bulutta yoksa (ilk giriş veya eski veriler), eski localStorage sisteminden yükler
+        const saved = localStorage.getItem(`campulse_joined_${APP_STATE.currentUser.id}`);
+        if (saved) {
+            try { 
+                APP_STATE.joinedEvents = JSON.parse(saved); 
+                // Eski veriyi buluta senkronize eder
+                saveJoinedEvents();
+            } catch (e) { 
+                APP_STATE.joinedEvents = []; 
+            }
+        } else {
+            APP_STATE.joinedEvents = [];
+        }
     }
     updateJoinedBadge();
 }
 
-function saveJoinedEvents() {
+// Cihazlar arası senkronizasyon için etkinlikleri kaydeder
+async function saveJoinedEvents() {
     if (!APP_STATE.currentUser) return;
+    
+    // 1. Hızlı UI tepkisi ve offline kullanım için localStorage'a kaydet
     localStorage.setItem(`campulse_joined_${APP_STATE.currentUser.id}`, JSON.stringify(APP_STATE.joinedEvents));
+    
+    // 2. Asıl kayıt: Supabase User Metadata'ya (Buluta) gönder (Tüm cihazlarda senkronize olması için)
+    const { data, error } = await supabaseClient.auth.updateUser({
+        data: { joinedEvents: APP_STATE.joinedEvents }
+    });
+
+    if (!error && data?.user) {
+        APP_STATE.currentUser = data.user; // State'i yeni metadata ile güncelle
+    } else {
+        console.error("Takvim bulut ile eşitlenirken bir hata oluştu:", error);
+    }
 }
 
 
