@@ -12,8 +12,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // Supabase istemcisini başlat
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Yönetici (Admin) Yetkisine Sahip E-Posta
-// BUNU EKLE:
+// Yönetici (Admin) Yetkisine Sahip E-Posta Listesi
 const ADMIN_EMAILS = [
     'emirhanbilir947@gmail.com', 
     'osamaalhajomar7@gmail.com',
@@ -26,31 +25,27 @@ const ADMIN_EMAILS = [
 // ==========================================
 const APP_STATE = {
     days: ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'],
-    categories: ['Tümü', 'Yazılım & Teknoloji', 'Kariyer', 'Sanat & Müzik', 'Spor', 'Sosyal Sorumluluk'],
-    selectedDayIndex: 1,      // Varsayılan: Pazartesi
-    selectedCategory: 'Tümü', // Varsayılan: Tümü
-    events: [],               // Veritabanından çekilecek ham etkinlikler
-    joinedEvents: [],         // Kullanıcının katıldığı etkinlik ID'leri (LocalStorage'da tutulur)
+    selectedDayIndex: 1,      // 1 = Pazartesi, 2 = Salı...
+    activeTab: 'all',         // 'all' (Tüm Etkinlikler) veya 'my-events' (Etkinliklerim)
+    events: [],               // Veritabanından çekilen ham etkinlikler
+    joinedEvents: [],         // Kullanıcının katıldığı etkinlik ID'leri (LocalStorage)
     currentUser: null         // Aktif oturum sahibi kullanıcı
 };
+
+let currentModalEventId = null;
 
 
 // ==========================================
 // 3. BAŞLATMA VE OTURUM KONTROLÜ
 // ==========================================
 window.onload = async () => {
-    // Katılınan etkinlikleri yerel hafızadan yükle
-    loadJoinedEvents();
-    
     // Oturum durumunu kontrol et
     const { data: { session }, error } = await supabaseClient.auth.getSession();
     
     if (session && session.user) {
-        // Oturum varsa ana ekranı yükle
         APP_STATE.currentUser = session.user;
         showMainScreen(session.user);
     } else {
-        // Oturum yoksa giriş ekranını göster
         document.getElementById('main-screen').style.display = 'none';
         document.getElementById('auth-screen').style.display = 'flex';
     }
@@ -61,7 +56,6 @@ window.onload = async () => {
 // 4. KİMLİK DOĞRULAMA (AUTH) FONKSİYONLARI
 // ==========================================
 
-// Kayıt Ol
 async function register() {
     const email = document.getElementById('email-input').value.trim();
     const password = document.getElementById('password-input').value.trim();
@@ -84,12 +78,10 @@ async function register() {
         showAuthMessage(translateAuthError(error.message), "error");
     } else {
         showAuthMessage("Kayıt başarılı! Hesabınız oluşturuldu, giriş yapabilirsiniz.", "success");
-        // Şifre kutusunu temizle
         document.getElementById('password-input').value = '';
     }
 }
 
-// Giriş Yap
 async function login() {
     const email = document.getElementById('email-input').value.trim();
     const password = document.getElementById('password-input').value.trim();
@@ -116,18 +108,16 @@ async function login() {
     }
 }
 
-// Çıkış Yap
 async function logout() {
     await supabaseClient.auth.signOut();
     
     APP_STATE.currentUser = null;
     APP_STATE.events = [];
+    APP_STATE.joinedEvents = [];
     
-    // Ekranları değiştir
     document.getElementById('main-screen').style.display = 'none';
     document.getElementById('auth-screen').style.display = 'flex';
     
-    // Formları temizle
     document.getElementById('password-input').value = '';
     document.getElementById('auth-message-box').classList.add('hidden');
     document.getElementById('admin-panel').style.display = 'none';
@@ -135,19 +125,17 @@ async function logout() {
 
 
 // ==========================================
-// 5. ANA EKRAN VE YÖNETİCİ (ADMIN) YETKİLENDİRMESİ
+// 5. ANA EKRAN VE ARAYÜZ YÖNETİMİ
 // ==========================================
 function showMainScreen(user) {
     if (!user) return;
 
-    // Arayüz geçişi
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('main-screen').style.display = 'flex';
     
-    // Kullanıcı bilgisini başlığa yaz
     document.getElementById('user-email-display').innerText = user.email;
 
-    // GÜVENLİK KONTROLÜ: SADECE ADMIN E-POSTASI İSE PANELİ GÖSTER
+    // Yönetici kontrolü
     const adminPanel = document.getElementById('admin-panel');
     if (ADMIN_EMAILS.includes(user.email)) {
         adminPanel.style.display = 'block';
@@ -155,38 +143,54 @@ function showMainScreen(user) {
         adminPanel.style.display = 'none';
     }
 
-    // Arayüz filtrelerini oluştur ve verileri çek
+    // Katılınan etkinlikleri yerel hafızadan yükle
+    loadJoinedEvents();
+
     renderDays();
-    renderCategories();
     fetchEvents();
 }
 
 function toggleAdminForm() {
     const form = document.getElementById('quickAddForm');
-    if (form.style.display === 'none') {
-        form.style.display = 'block';
+    form.style.display = (form.style.display === 'none') ? 'block' : 'none';
+}
+
+function setActiveTab(tab) {
+    APP_STATE.activeTab = tab;
+    
+    const tabAll = document.getElementById('tab-all');
+    const tabMy = document.getElementById('tab-my-events');
+    const daysContainer = document.getElementById('daysListContainer');
+
+    if (tab === 'all') {
+        tabAll.className = "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-md";
+        tabMy.className = "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200";
+        daysContainer.style.display = 'flex';
     } else {
-        form.style.display = 'none';
+        tabMy.className = "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-md";
+        tabAll.className = "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200";
+        daysContainer.style.display = 'none';
     }
+
+    renderEvents();
 }
 
 
 // ==========================================
-// 6. VERİTABANI (SUPABASE) İŞLEMLERİ
+// 6. VERİTABANI İŞLEMLERİ
 // ==========================================
 
-// Etkinlikleri Veritabanından Çek
 async function fetchEvents() {
     const loader = document.getElementById('loading-indicator');
     const container = document.getElementById('eventsContainer');
     
     loader.style.display = 'flex';
-    container.innerHTML = ''; // Temizle
+    container.innerHTML = '';
 
     const { data: events, error } = await supabaseClient
         .from('events')
         .select('*')
-        .order('created_at', { ascending: false }); // En son eklenen en üstte
+        .order('created_at', { ascending: false });
     
     loader.style.display = 'none';
 
@@ -195,18 +199,17 @@ async function fetchEvents() {
         container.innerHTML = `
             <div class="text-center py-10 bg-red-950/20 rounded-3xl border border-red-900/50">
                 <p class="text-red-400 font-bold">Veriler yüklenirken bir hata oluştu.</p>
-                <p class="text-xs text-red-400/60 mt-2">${error.message}</p>
+                <p class="text-xs text-red-400/60 mt-2">${escapeHtml(error.message)}</p>
             </div>
         `;
         return;
     }
 
-    // Verileri global duruma kaydet ve ekrana bas
     APP_STATE.events = events || [];
+    updateJoinedBadge();
     renderEvents();
 }
 
-// Yönetici: Yeni Etkinlik Ekle
 async function handleAddEvent(e) {
     e.preventDefault();
     
@@ -215,7 +218,6 @@ async function handleAddEvent(e) {
     submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Yükleniyor...';
     submitBtn.disabled = true;
 
-    // Form verilerini al
     const title = document.getElementById('addTitle').value.trim();
     const club = document.getElementById('addClub').value.trim();
     const location = document.getElementById('addLocation').value.trim();
@@ -224,10 +226,6 @@ async function handleAddEvent(e) {
     const endStr = document.getElementById('addEndTime').value;
     const description = document.getElementById('addDesc').value.trim() || 'Açıklama girilmemiş.';
     
-    // Rastgele kategori seçimi (Basitleştirilmiş form için formda kategori yoksa)
-    const category = APP_STATE.categories[1]; // Yazılım & Teknoloji
-
-    // Saatleri sayısal değere çevir (Çakışma hesabı için: 14:30 -> 14.5)
     const startVal = timeToVal(startStr);
     const endVal = timeToVal(endStr);
 
@@ -238,12 +236,11 @@ async function handleAddEvent(e) {
         return;
     }
 
-    // Supabase'e ekle (Tablonda eksik sütun varsa SQL'den eklemen gerekebilir. Mevcut SQL'ine göre title, description, date ekliyorum)
     const { error } = await supabaseClient.from('events').insert([
         { 
             title: title, 
-            description: `${club} | ${location} | ${startStr}-${endStr} | ${description}`, // Şimdilik tüm detayı description'a gömüyoruz
-            date: getNextDateForDay(dayIndex).toISOString() // Gerçek tarih hesaplayıcı
+            description: `${club} | ${location} | ${startStr}-${endStr} | ${description}`,
+            date: getNextDateForDay(dayIndex).toISOString()
         }
     ]);
 
@@ -258,18 +255,15 @@ async function handleAddEvent(e) {
         document.getElementById('quickAddForm').reset();
         toggleAdminForm();
         
-        // Sadece eklenen güne odaklan ve listeyi güncelle
         APP_STATE.selectedDayIndex = dayIndex;
         renderDays();
         fetchEvents();
     }
 }
 
-// Yönetici: Etkinlik Sil
 async function deleteEvent(id, title) {
     if (!confirm(`"${title}" etkinliğini kalıcı olarak silmek istediğinize emin misiniz?`)) return;
 
-    // UI'dan hemen gizle (Optimistic update)
     const card = document.getElementById(`event-card-${id}`);
     if (card) card.style.opacity = '0.5';
 
@@ -279,24 +273,29 @@ async function deleteEvent(id, title) {
         if (card) card.style.opacity = '1';
         showToast("Silinemedi: Sadece yönetici etkinlik silebilir.", "error");
     } else {
+        // Takvim listesinden de çıkar
+        const idx = APP_STATE.joinedEvents.indexOf(id);
+        if (idx > -1) {
+            APP_STATE.joinedEvents.splice(idx, 1);
+            saveJoinedEvents();
+        }
         showToast('Etkinlik veritabanından silindi.', 'success');
-        fetchEvents(); // Listeyi yenile
+        fetchEvents();
     }
 }
 
 
 // ==========================================
-// 7. ARAYÜZ (UI) OLUŞTURUCULARI (RENDERERS)
+// 7. ARAYÜZ (UI) OLUŞTURUCULARI & RENDER
 // ==========================================
 
-// Haftanın Günlerini Oluştur
 function renderDays() {
     const container = document.getElementById('daysList');
     container.innerHTML = APP_STATE.days.map((day, idx) => {
         const dayNum = idx + 1;
         const active = dayNum === APP_STATE.selectedDayIndex;
         return `
-            <button onclick="setDay(${dayNum})" class="px-5 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
+            <button onclick="setDay(${dayNum})" class="flex-1 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
                 active 
                 ? 'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)] border border-indigo-400/30' 
                 : 'bg-slate-800/90 text-slate-400 border border-slate-700/60 hover:border-slate-600 hover:text-slate-200'
@@ -307,114 +306,133 @@ function renderDays() {
     }).join('');
 }
 
-// Kategorileri Oluştur
-function renderCategories() {
-    const container = document.getElementById('categoriesList');
-    container.innerHTML = APP_STATE.categories.map(cat => {
-        const active = cat === APP_STATE.selectedCategory;
-        return `
-            <button onclick="setCategory('${cat}')" class="px-4 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${
-                active 
-                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/40 font-bold' 
-                : 'bg-slate-900/80 text-slate-500 border border-slate-800 hover:text-slate-300'
-            }">
-                ${cat}
-            </button>
-        `;
-    }).join('');
-}
-
-// Etkinlikleri Listele ve Filtrele
 function renderEvents() {
     const container = document.getElementById('eventsContainer');
     const query = (document.getElementById('searchInput').value || '').toLowerCase();
     
-    // Veritabanından gelen veriyi filtrele
-    const filtered = APP_STATE.events.filter(ev => {
-        // Tablondaki date sütunundan günü buluyoruz (Supabase'den gelen timestamp)
-        const evDate = new Date(ev.date);
-        let evDayIndex = evDate.getDay(); 
-        if (evDayIndex === 0) evDayIndex = 7; // Pazar gününü 7 yap (JS'de normalde 0'dır)
+    let filtered = [];
 
-        const matchesDay = evDayIndex === APP_STATE.selectedDayIndex;
-        const matchesSearch = ev.title.toLowerCase().includes(query) || 
-                              (ev.description && ev.description.toLowerCase().includes(query));
-        
-        return matchesDay && matchesSearch;
-    });
+    if (APP_STATE.activeTab === 'all') {
+        filtered = APP_STATE.events.filter(ev => {
+            const parsed = parseEventData(ev);
+            const matchesDay = parsed.dayIndex === APP_STATE.selectedDayIndex;
+            const matchesSearch = ev.title.toLowerCase().includes(query) || 
+                                  parsed.pureDesc.toLowerCase().includes(query) ||
+                                  parsed.clubName.toLowerCase().includes(query);
+            return matchesDay && matchesSearch;
+        });
+    } else {
+        // "Etkinliklerim" sekmesi: Sadece takvime katılanları listele
+        filtered = APP_STATE.events.filter(ev => {
+            const isJoined = APP_STATE.joinedEvents.includes(ev.id);
+            const parsed = parseEventData(ev);
+            const matchesSearch = ev.title.toLowerCase().includes(query) || 
+                                  parsed.pureDesc.toLowerCase().includes(query) ||
+                                  parsed.clubName.toLowerCase().includes(query);
+            return isJoined && matchesSearch;
+        });
+
+        // Etkinliklerim sekmesinde gün sırasına göre diz
+        filtered.sort((a, b) => {
+            const pA = parseEventData(a);
+            const pB = parseEventData(b);
+            if (pA.dayIndex !== pB.dayIndex) return pA.dayIndex - pB.dayIndex;
+            return pA.startVal - pB.startVal;
+        });
+    }
 
     if (filtered.length === 0) {
+        const isMyTab = APP_STATE.activeTab === 'my-events';
         container.innerHTML = `
             <div class="text-center py-16 bg-slate-800/30 rounded-3xl border border-dashed border-slate-700/50">
                 <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-800 mb-4 shadow-inner">
-                    <i class="fa-regular fa-calendar-xmark text-2xl text-slate-500"></i>
+                    <i class="fa-regular ${isMyTab ? 'fa-bookmark' : 'fa-calendar-xmark'} text-2xl text-slate-500"></i>
                 </div>
-                <h3 class="text-slate-300 font-bold mb-1">Etkinlik Bulunamadı</h3>
-                <p class="text-xs text-slate-500 max-w-xs mx-auto">Bu güne veya arama kriterine uygun bir etkinlik henüz planlanmamış.</p>
+                <h3 class="text-slate-300 font-bold mb-1">${isMyTab ? 'Takviminizde Etkinlik Yok' : 'Etkinlik Bulunamadı'}</h3>
+                <p class="text-xs text-slate-500 max-w-xs mx-auto">
+                    ${isMyTab 
+                        ? 'Henüz hiçbir etkinliğe katılmadınız. "Tüm Etkinlikler" sekmesinden ilgilendiğiniz ders veya kulüpleri takviminize ekleyebilirsiniz.' 
+                        : 'Bu güne veya arama kriterine uygun bir etkinlik henüz planlanmamış.'}
+                </p>
             </div>
         `;
         return;
     }
 
     container.innerHTML = filtered.map(ev => {
-        // SQL yapında açıklama sütununda birleştirdiğimiz verileri ayrıştırıyoruz
-        // Format varsayımı: "Kulüp | Konum | 14:00-15:30 | Gerçek Açıklama"
-        let clubName = "Kampüs Etkinliği";
-        let location = "Belirtilmedi";
-        let timeStr = "Saat Belirtilmedi";
-        let pureDesc = ev.description;
-        
-        if (ev.description && ev.description.includes('|')) {
-            const parts = ev.description.split('|');
-            if (parts.length >= 4) {
-                clubName = parts[0].trim();
-                location = parts[1].trim();
-                timeStr = parts[2].trim();
-                pureDesc = parts.slice(3).join('|').trim();
-            }
-        }
-
+        const parsed = parseEventData(ev);
         const isJoined = APP_STATE.joinedEvents.includes(ev.id);
         const isAdmin = APP_STATE.currentUser && ADMIN_EMAILS.includes(APP_STATE.currentUser.email);
+        
+        // ÇAKIŞMA KONTROLÜ: SADECE TAKVİME EKLENEN VE ÇAKIŞAN ETKİNLİKLERDE
+        const hasConflict = isJoined && checkEventConflict(ev.id);
 
-        // Kart Şablonu
+        const dayName = APP_STATE.days[parsed.dayIndex - 1] || 'Günü Belirtilmedi';
+
         return `
-            <div id="event-card-${ev.id}" class="event-card rounded-3xl p-5 border ${isJoined ? 'border-emerald-500/50 bg-emerald-950/10' : 'border-slate-700/60'} space-y-4">
+            <div id="event-card-${ev.id}" 
+                 onclick="handleCardClick(event, '${ev.id}')"
+                 class="event-card cursor-pointer rounded-3xl p-5 border transition-all ${
+                    hasConflict 
+                    ? 'conflict-card bg-red-950/20' 
+                    : isJoined 
+                        ? 'border-emerald-500/50 bg-emerald-950/10' 
+                        : 'border-slate-700/60'
+                 } space-y-4">
                 
-                <div class="flex items-start justify-between">
-                    <div>
-                        <span class="inline-block text-[10px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-md mb-2">
-                            ${clubName}
-                        </span>
-                        <h3 class="font-bold text-lg text-white leading-tight">${ev.title}</h3>
+                <div class="flex items-start justify-between gap-3">
+                    <div class="space-y-1.5">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="inline-block text-[10px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-md border border-indigo-500/20">
+                                ${escapeHtml(parsed.clubName)}
+                            </span>
+                            ${APP_STATE.activeTab === 'my-events' ? `
+                                <span class="inline-block text-[10px] font-bold text-cyan-300 bg-cyan-500/10 px-2.5 py-0.5 rounded-md border border-cyan-500/20">
+                                    <i class="fa-regular fa-calendar mr-1"></i>${dayName}
+                                </span>
+                            ` : ''}
+                            ${hasConflict ? `
+                                <span class="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-400 bg-red-500/20 px-2 py-0.5 rounded-md border border-red-500/40" title="Takviminizde aynı saatte katıldığınız başka bir etkinlik var!">
+                                    <i class="fa-solid fa-triangle-exclamation text-red-500 animate-pulse"></i>
+                                    Saat Çakışması!
+                                </span>
+                            ` : ''}
+                        </div>
+                        <h3 class="font-bold text-lg text-white leading-snug">${escapeHtml(ev.title)}</h3>
                     </div>
                     
                     ${isAdmin ? `
-                        <button onclick="deleteEvent('${ev.id}', '${ev.title}')" class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-colors border border-red-500/20">
+                        <button onclick="event.stopPropagation(); deleteEvent('${ev.id}', '${escapeHtml(ev.title)}')" class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-colors border border-red-500/20">
                             <i class="fa-solid fa-trash-can text-sm"></i>
                         </button>
                     ` : ''}
                 </div>
 
-                <p class="text-sm text-slate-400 leading-relaxed line-clamp-2">${pureDesc}</p>
+                <!-- İki Satırla Sınırlandırılmış Önizleme Metni -->
+                <p class="text-sm text-slate-400 leading-relaxed line-clamp-2">${escapeHtml(parsed.pureDesc)}</p>
 
-                <div class="flex items-center justify-between pt-3 border-t border-slate-700/50">
-                    <div class="flex items-center space-x-3 text-xs font-medium text-slate-300">
-                        <span class="flex items-center gap-1.5"><i class="fa-regular fa-clock text-cyan-400"></i> ${timeStr}</span>
+                <div class="flex items-center justify-between pt-3 border-t border-slate-700/50 text-xs">
+                    <div class="flex items-center space-x-3 font-medium text-slate-300">
+                        <span class="flex items-center gap-1.5"><i class="fa-regular fa-clock text-cyan-400"></i> ${escapeHtml(parsed.timeStr)}</span>
                         <span class="text-slate-600">•</span>
-                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-location-dot text-slate-500"></i> ${location}</span>
+                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-location-dot text-indigo-400"></i> ${escapeHtml(parsed.location)}</span>
                     </div>
                     
-                    <button onclick="toggleJoin('${ev.id}')" class="px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
-                        isJoined 
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 group' 
-                        : 'bg-slate-700/80 text-white hover:bg-indigo-600'
-                    }">
-                        <i class="fa-solid ${isJoined ? 'fa-check group-hover:hidden' : 'fa-plus'} mr-1"></i>
-                        <i class="fa-solid fa-xmark hidden group-hover:inline-block mr-1"></i>
-                        <span class="group-hover:hidden">${isJoined ? 'Katılıyorsun' : 'Katıl'}</span>
-                        <span class="hidden group-hover:inline-block">Vazgeç</span>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] font-semibold text-cyan-400 hover:underline flex items-center gap-1 hidden sm:inline-flex">
+                            Detay <i class="fa-solid fa-chevron-right text-[9px]"></i>
+                        </span>
+                        <button onclick="event.stopPropagation(); toggleJoin('${ev.id}')" class="px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                            isJoined 
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 group' 
+                            : 'bg-slate-700/80 text-white hover:bg-indigo-600'
+                        }">
+                            <i class="fa-solid ${isJoined ? 'fa-check group-hover:hidden' : 'fa-plus'} mr-1"></i>
+                            <i class="fa-solid fa-xmark hidden group-hover:inline-block mr-1"></i>
+                            <span class="group-hover:hidden">${isJoined ? 'Katılıyorsun' : 'Katıl'}</span>
+                            <span class="hidden group-hover:inline-block">Vazgeç</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
@@ -423,57 +441,183 @@ function renderEvents() {
 
 
 // ==========================================
-// 8. KULLANICI ETKİLEŞİMİ VE YARDIMCILAR
+// 8. ETKİNLİK DETAY MODALI
 // ==========================================
 
-// Gün Değiştirme
+function handleCardClick(event, eventId) {
+    // Buton tıklamaları haricinde kartın genelini tıklayınca modal aç
+    openEventModal(eventId);
+}
+
+function openEventModal(eventId) {
+    const ev = APP_STATE.events.find(e => e.id === eventId);
+    if (!ev) return;
+
+    currentModalEventId = eventId;
+    const parsed = parseEventData(ev);
+    const isJoined = APP_STATE.joinedEvents.includes(ev.id);
+    const hasConflict = isJoined && checkEventConflict(ev.id);
+    const dayName = APP_STATE.days[parsed.dayIndex - 1] || 'Günü Belirtilmedi';
+
+    document.getElementById('modalTitle').innerText = ev.title;
+    document.getElementById('modalTime').innerText = `${dayName} | ${parsed.timeStr}`;
+    document.getElementById('modalLocation').innerText = parsed.location;
+    document.getElementById('modalDescription').innerText = parsed.pureDesc;
+
+    // Rozetler
+    const badgesContainer = document.getElementById('modalBadges');
+    badgesContainer.innerHTML = `
+        <span class="text-[11px] font-black uppercase text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-md border border-indigo-500/20">
+            ${escapeHtml(parsed.clubName)}
+        </span>
+    `;
+
+    // Çakışma Uyarısı Gösterimi
+    const alertBox = document.getElementById('modalConflictAlert');
+    if (hasConflict) {
+        alertBox.classList.remove('hidden');
+    } else {
+        alertBox.classList.add('hidden');
+    }
+
+    // Aksiyon Butonu
+    const actionContainer = document.getElementById('modalActionContainer');
+    actionContainer.innerHTML = `
+        <button id="modalJoinBtn" onclick="toggleJoin('${ev.id}')" class="px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg ${
+            isJoined 
+            ? 'bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white' 
+            : 'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white hover:from-indigo-400 hover:to-cyan-400'
+        }">
+            <i class="fa-solid ${isJoined ? 'fa-xmark' : 'fa-plus'} mr-1.5"></i>
+            ${isJoined ? 'Takvimimden Çıkar' : 'Takvime Ekle'}
+        </button>
+    `;
+
+    const modal = document.getElementById('eventDetailModal');
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeEventModal() {
+    const modal = document.getElementById('eventDetailModal');
+    modal.classList.add('hidden');
+    document.body.style.overflow = 'auto';
+    currentModalEventId = null;
+}
+
+// Modal arka planına tıklayınca kapatma
+document.getElementById('eventDetailModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'eventDetailModal') {
+        closeEventModal();
+    }
+});
+
+
+// ==========================================
+// 9. TAKVİM VE ÇAKIŞMA MANTIĞI
+// ==========================================
+
 function setDay(index) {
     APP_STATE.selectedDayIndex = index;
     renderDays();
     renderEvents();
 }
 
-// Kategori Değiştirme
-function setCategory(cat) {
-    APP_STATE.selectedCategory = cat;
-    renderCategories();
-    renderEvents();
-}
-
-// Etkinliğe Katıl / Ayrıl (LocalStorage tabanlı bireysel takvim)
 function toggleJoin(eventId) {
+    if (!APP_STATE.currentUser) return;
+
     const idx = APP_STATE.joinedEvents.indexOf(eventId);
+    let newlyAdded = false;
+
     if (idx > -1) {
-        APP_STATE.joinedEvents.splice(idx, 1); // Çıkar
-        showToast('Etkinlik kişisel takviminden çıkarıldı.', 'info');
+        APP_STATE.joinedEvents.splice(idx, 1);
+        showToast('Etkinlik kişisel takviminizden çıkarıldı.', 'info');
     } else {
-        APP_STATE.joinedEvents.push(eventId); // Ekle
-        showToast('Etkinlik kişisel takvimine eklendi!', 'success');
+        APP_STATE.joinedEvents.push(eventId);
+        newlyAdded = true;
     }
     
-    // Tarayıcı hafızasına kaydet
-    localStorage.setItem(`campulse_joined_${APP_STATE.currentUser.id}`, JSON.stringify(APP_STATE.joinedEvents));
-    
-    // Arayüzü yenile
+    saveJoinedEvents();
+    updateJoinedBadge();
+
+    // Sadece yeni eklendiyse ve saat çakışması varsa uyarı bildirimi ver
+    if (newlyAdded) {
+        if (checkEventConflict(eventId)) {
+            showToast('Takvime eklendi, fakat başka bir etkinlikle saat çakışması var! ⚠️', 'warning');
+        } else {
+            showToast('Etkinlik kişisel takviminize eklendi!', 'success');
+        }
+    }
+
     renderEvents();
+
+    // Eğer detay modalı açıksa, buton durumunu güncelle
+    if (currentModalEventId === eventId) {
+        openEventModal(eventId);
+    }
 }
 
-// Hafızadan katılım bilgilerini çek
+// Sadece takvime katılım yapılmış etkinlikler arasında aynı gün ve çakışan saat kontrolü
+function checkEventConflict(targetEventId) {
+    if (!APP_STATE.joinedEvents.includes(targetEventId)) return false;
+
+    const targetEv = APP_STATE.events.find(e => e.id === targetEventId);
+    if (!targetEv) return false;
+
+    const targetParsed = parseEventData(targetEv);
+
+    for (const otherId of APP_STATE.joinedEvents) {
+        if (otherId === targetEventId) continue;
+
+        const otherEv = APP_STATE.events.find(e => e.id === otherId);
+        if (!otherEv) continue;
+
+        const otherParsed = parseEventData(otherEv);
+
+        // Aynı gündeler mi?
+        if (targetParsed.dayIndex === otherParsed.dayIndex) {
+            // Saat aralıkları çakışıyor mu? (Start1 < End2 AND End1 > Start2)
+            if (targetParsed.startVal < otherParsed.endVal && targetParsed.endVal > otherParsed.startVal) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function updateJoinedBadge() {
+    const badge = document.getElementById('joinedCountBadge');
+    if (badge) {
+        badge.innerText = APP_STATE.joinedEvents.length;
+    }
+}
+
 function loadJoinedEvents() {
     if (!APP_STATE.currentUser) return;
     const saved = localStorage.getItem(`campulse_joined_${APP_STATE.currentUser.id}`);
     if (saved) {
-        try { APP_STATE.joinedEvents = JSON.parse(saved); } 
-        catch (e) { APP_STATE.joinedEvents = []; }
+        try { 
+            APP_STATE.joinedEvents = JSON.parse(saved); 
+        } catch (e) { 
+            APP_STATE.joinedEvents = []; 
+        }
+    } else {
+        APP_STATE.joinedEvents = [];
     }
+    updateJoinedBadge();
+}
+
+function saveJoinedEvents() {
+    if (!APP_STATE.currentUser) return;
+    localStorage.setItem(`campulse_joined_${APP_STATE.currentUser.id}`, JSON.stringify(APP_STATE.joinedEvents));
 }
 
 
 // ==========================================
-// 9. UI GERİ BİLDİRİM SİSTEMLERİ (TOAST & LOADERS)
+// 10. YARDIMCI VE BİLDİRİM FONKSİYONLARI
 // ==========================================
 
-// Toast Mesajı Gösterici
 function showToast(msg, type = 'success') {
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toastMsg');
@@ -483,6 +627,9 @@ function showToast(msg, type = 'success') {
 
     if (type === 'error') {
         toast.className = "fixed bottom-6 right-6 bg-red-600 text-white font-semibold text-sm px-4 py-3 rounded-xl shadow-[0_10px_40px_rgba(220,38,38,0.4)] transition-all duration-300 transform z-50 flex items-center space-x-2 max-w-sm";
+        toastIcon.className = "fa-solid fa-triangle-exclamation text-base";
+    } else if (type === 'warning') {
+        toast.className = "fixed bottom-6 right-6 bg-amber-600 text-white font-semibold text-sm px-4 py-3 rounded-xl shadow-[0_10px_40px_rgba(217,119,6,0.4)] transition-all duration-300 transform z-50 flex items-center space-x-2 max-w-sm";
         toastIcon.className = "fa-solid fa-triangle-exclamation text-base";
     } else if (type === 'info') {
         toast.className = "fixed bottom-6 right-6 bg-slate-700 text-white font-semibold text-sm px-4 py-3 rounded-xl shadow-2xl transition-all duration-300 transform z-50 flex items-center space-x-2 max-w-sm";
@@ -494,15 +641,13 @@ function showToast(msg, type = 'success') {
 
     toast.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
     
-    // Mevcut zamanlayıcı varsa temizle (üst üste tıklamalar için)
-    if(window.toastTimer) clearTimeout(window.toastTimer);
+    if (window.toastTimer) clearTimeout(window.toastTimer);
     
     window.toastTimer = setTimeout(() => {
         toast.classList.add('translate-y-24', 'opacity-0', 'pointer-events-none');
-    }, 3000);
+    }, 3500);
 }
 
-// Giriş/Kayıt Ekranı Uyarı Kutusu
 function showAuthMessage(msg, type) {
     const box = document.getElementById('auth-message-box');
     const text = document.getElementById('auth-message-text');
@@ -521,7 +666,6 @@ function showAuthMessage(msg, type) {
     text.innerText = msg;
 }
 
-// Buton Yükleniyor Animasyonu Kontrolü
 function setAuthLoading(action, isLoading) {
     const btnText = document.getElementById(`${action}-text`);
     const loader = document.getElementById(`${action}-loader`);
@@ -540,12 +684,62 @@ function setAuthLoading(action, isLoading) {
     }
 }
 
+function parseEventData(ev) {
+    let clubName = "Kampüs Etkinliği";
+    let location = "Belirtilmedi";
+    let timeStr = "Saat Belirtilmedi";
+    let pureDesc = ev.description || "Açıklama belirtilmedi.";
+    
+    if (ev.description && ev.description.includes('|')) {
+        const parts = ev.description.split('|');
+        if (parts.length >= 4) {
+            clubName = parts[0].trim();
+            location = parts[1].trim();
+            timeStr = parts[2].trim();
+            pureDesc = parts.slice(3).join('|').trim();
+        }
+    }
 
-// ==========================================
-// 10. YARDIMCI FONKSİYONLAR (UTILS)
-// ==========================================
+    const evDate = new Date(ev.date);
+    let dayIndex = evDate.getDay();
+    if (dayIndex === 0) dayIndex = 7; // Pazar = 7
 
-// Supabase İngilizce Hatalarını Türkçeye Çevir
+    let startVal = 0;
+    let endVal = 0;
+
+    if (timeStr.includes('-')) {
+        const times = timeStr.split('-');
+        if (times.length === 2) {
+            startVal = timeToVal(times[0].trim());
+            endVal = timeToVal(times[1].trim());
+        }
+    }
+
+    return { clubName, location, timeStr, pureDesc, dayIndex, startVal, endVal };
+}
+
+function timeToVal(timeStr) {
+    if (!timeStr) return 0;
+    const parts = timeStr.split(':');
+    if (parts.length < 2) return 0;
+    const h = Number(parts[0]) || 0;
+    const m = Number(parts[1]) || 0;
+    return h + (m / 60.0);
+}
+
+function getNextDateForDay(targetDayIndex) {
+    const date = new Date();
+    let currentDay = date.getDay();
+    if (currentDay === 0) currentDay = 7;
+    
+    let daysToAdd = targetDayIndex - currentDay;
+    if (daysToAdd < 0) daysToAdd += 7;
+    
+    date.setDate(date.getDate() + daysToAdd);
+    date.setHours(12, 0, 0, 0); 
+    return date;
+}
+
 function translateAuthError(msg) {
     const lowerMsg = msg.toLowerCase();
     if (lowerMsg.includes('invalid login credentials')) return "E-posta veya şifre hatalı.";
@@ -555,25 +749,12 @@ function translateAuthError(msg) {
     return msg;
 }
 
-// Saati ondalık sayıya çevirir (14:30 -> 14.5)
-function timeToVal(timeStr) {
-    if (!timeStr) return 0;
-    const [h, m] = timeStr.split(':').map(Number);
-    return h + (m / 60.0);
-}
-
-// Seçilen gün indexine göre en yakın gelecekteki tam tarihi hesaplar (Supabase veritabanı için)
-function getNextDateForDay(targetDayIndex) {
-    const date = new Date();
-    // JS'de pazar=0, bizde pazar=7. O yüzden ayarlama yapıyoruz
-    let currentDay = date.getDay();
-    if (currentDay === 0) currentDay = 7;
-    
-    let daysToAdd = targetDayIndex - currentDay;
-    if (daysToAdd < 0) daysToAdd += 7; // Geçmiş günse haftaya ekle
-    
-    date.setDate(date.getDate() + daysToAdd);
-    // Saat kısmını sıfırla ki aramalar stabil olsun
-    date.setHours(12, 0, 0, 0); 
-    return date;
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
