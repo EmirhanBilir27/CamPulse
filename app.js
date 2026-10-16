@@ -2,7 +2,7 @@
 'use strict';
 
 const SUPABASE_URL = 'https://yrkugifzbfxfszitjztr.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6Inlya3VnaWZ6YmZ4ZnN6aXRqenRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5MDk2ODQsImV4cCI6MjEwNzQ4NTY4NH0.4iPf-dbN94DYb-PphCCTM-Tt7bvii4FEKfW8NN5WPPQ';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlya3VnaWZ6YmZ4ZnN6aXRqenRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5MDk2ODQsImV4cCI6MjEwNzQ4NTY4NH0.4iPf-dbN94DYb-PphCCTM-Tt7bvii4FEKfW8NN5WPPQ';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
