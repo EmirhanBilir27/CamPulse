@@ -152,12 +152,20 @@ async function register() {
     }
 }
 
+// app.js dosyası
 async function login() {
     const email = document.getElementById('email-input').value.trim();
     const password = document.getElementById('password-input').value.trim();
+    const kvkkChecked = document.getElementById('kvkk-checkbox').checked; // KVKK checkbox durumunu al
     
     if (!email || !password) {
         showAuthMessage("Giriş yapmak için e-posta ve şifrenizi girin.", "error");
+        return;
+    }
+
+    // KVKK onay kontrolünü ekleyin
+    if (!kvkkChecked) {
+        showAuthMessage("Giriş yapmak için KVKK ve Kullanıcı Sözleşmesi'ni kabul etmelisiniz.", "error");
         return;
     }
 
@@ -1086,4 +1094,49 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+// ==========================================
+// 11. YASAL VE BİLGİLENDİRME MODALI YÖNETİMİ
+// ==========================================
+
+function openInfoModal(targetTab = 'kvkk') {
+    const modal = document.getElementById('infoModal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden'; // Arka plan kaymasını engelle
+    switchInfoTab(targetTab);
+}
+
+function closeInfoModal() {
+    const modal = document.getElementById('infoModal');
+    if (!modal) return;
+
+    modal.classList.add('hidden');
+    document.body.style.overflow = 'auto';
+}
+
+function switchInfoTab(tabName) {
+    const tabs = ['kvkk', 'privacy', 'terms', 'support', 'about'];
+    
+    tabs.forEach(t => {
+        const btn = document.getElementById(`info-tab-${t}`);
+        const content = document.getElementById(`info-content-${t}`);
+        
+        if (t === tabName) {
+            if (btn) {
+                btn.className = "flex-1 px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-md";
+            }
+            if (content) {
+                content.classList.remove('hidden');
+            }
+        } else {
+            if (btn) {
+                btn.className = "flex-1 px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all text-slate-400 hover:text-slate-200";
+            }
+            if (content) {
+                content.classList.add('hidden');
+            }
+        }
+    });
 }

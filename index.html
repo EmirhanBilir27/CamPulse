@@ -235,13 +235,14 @@
                     <span id="auth-message-text"></span>
                 </div>
 
-                <!-- KVKK Checkbox -->
-                <div class="flex items-start gap-2 pt-1 pb-1">
-                    <input type="checkbox" id="kvkk-checkbox" class="mt-0.5 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/50">
-                    <label for="kvkk-checkbox" class="text-[10px] text-slate-400 leading-tight">
-                        <a href="#" class="text-cyan-400 hover:underline">KVKK Aydınlatma Metni</a>'ni ve Kullanıcı Sözleşmesi'ni okudum, kabul ediyorum.
-                    </label>
-                </div>
+                <!-- KVKK Checkbox (Giriş Ekranı) -->
+<div class="flex items-start gap-2 pt-1 pb-1">
+    <input type="checkbox" id="kvkk-checkbox" class="mt-0.5 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/50 cursor-pointer">
+    <label for="kvkk-checkbox" class="text-[10px] text-slate-400 leading-tight">
+        <span onclick="event.preventDefault(); openInfoModal('kvkk');" class="text-cyan-400 hover:underline cursor-pointer relative z-10 font-medium">KVKK Aydınlatma Metni</span>'ni ve 
+        <span onclick="event.preventDefault(); openInfoModal('terms');" class="text-cyan-400 hover:underline cursor-pointer relative z-10 font-medium">Kullanıcı Sözleşmesi</span>'ni okudum, kabul ediyorum.
+    </label>
+</div>
 
                 <div class="pt-2 space-y-3">
                     <button onclick="login()" id="login-btn" class="relative w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-cyan-500/25 transition-all overflow-hidden flex justify-center items-center h-12">
@@ -262,27 +263,40 @@
     <div id="main-screen" style="display: none;" class="w-full h-full flex flex-col flex-1">
         
         <!-- HEADER -->
-        <header class="sticky top-0 z-30 px-4 py-3">
-            <div class="max-w-4xl mx-auto flex items-center justify-between">
-                <div class="flex items-center space-x-3">
-                    <div class="logo-box w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-500 flex items-center justify-center shadow-lg">
-                        <i class="fa-solid fa-wave-square text-white text-lg"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-400 bg-clip-text text-transparent">
-                            Cam<span class="text-cyan-400">Pulse</span>
-                        </h1>
-                        <p id="user-email-display" class="text-[10px] text-slate-400 font-medium">Yükleniyor...</p>
-                    </div>
-                </div>
-
-                <div class="flex items-center bg-slate-800/90 p-1.5 rounded-xl border border-slate-700/80">
-                    <button onclick="logout()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-red-400 hover:text-white hover:bg-red-500/80 flex items-center gap-1.5">
-                        <i class="fa-solid fa-arrow-right-from-bracket"></i> <span class="hidden sm:inline">Çıkış</span>
-                    </button>
-                </div>
+       <!-- index.html dosyası - Ana Ekran Header Alanı -->
+<header class="sticky top-0 z-30 px-4 py-3">
+    <div class="max-w-4xl mx-auto flex items-center justify-between">
+        
+        <!-- Sol Taraf: Logo ve E-posta -->
+        <div class="flex items-center space-x-3">
+            <div class="logo-box w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-500 flex items-center justify-center shadow-lg">
+                <i class="fa-solid fa-wave-square text-white text-lg"></i>
             </div>
-        </header>
+            <div>
+                <h1 class="text-xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-400 bg-clip-text text-transparent">
+                    Cam<span class="text-cyan-400">Pulse</span>
+                </h1>
+                <p id="user-email-display" class="text-[10px] text-slate-400 font-medium">Yükleniyor...</p>
+            </div>
+        </div>
+
+        <!-- Sağ Taraf: Bilgi İkonu ve Çıkış Butonu -->
+        <div class="flex items-center gap-2">
+            <!-- Bilgi Modalı Açma Butonu -->
+            <button onclick="openInfoModal('about')" title="Bilgiler & Yasal Haklar" class="w-8 h-8 rounded-xl bg-slate-800/90 text-slate-400 hover:text-white hover:bg-slate-700 transition-all border border-slate-700/80 flex items-center justify-center">
+                <i class="fa-solid fa-circle-info text-sm text-cyan-400"></i>
+            </button>
+            
+            <!-- Tek Bir Çıkış Butonu -->
+            <div class="flex items-center bg-slate-800/90 p-1.5 rounded-xl border border-slate-700/80">
+                <button onclick="logout()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-red-400 hover:text-white hover:bg-red-500/80 flex items-center gap-1.5">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i> <span class="hidden sm:inline">Çıkış</span>
+                </button>
+            </div>
+        </div>
+        
+    </div>
+</header>
 
         <!-- ANA İÇERİK -->
         <main class="max-w-4xl mx-auto w-full flex-1 px-4 py-6 space-y-5" id="main-content-area">
@@ -457,5 +471,128 @@
 
     <!-- Uygulama Mantık Dosyası -->
     <script src="app.js"></script>
+    <!-- YASAL VE BİLGİLENDİRME MODALI -->
+<!-- YASAL VE BİLGİLENDİRME MODALI -->
+<div id="infoModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4 hidden">
+    
+    <!-- İçerik daha önce eklediğiniz ile tamamen aynı kalacak... -->
+    <div class="modal-content w-full max-w-2xl rounded-3xl p-6 shadow-2xl relative space-y-4 max-h-[85vh] flex flex-col overflow-hidden">
+        
+        <!-- Modal Üst Başlık ve Kapat Butonu -->
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-shield-cat text-cyan-400 text-lg"></i>
+                <h3 id="infoModalTitle" class="text-base font-bold text-white">Bilgilendirme ve Yasal Haklar</h3>
+            </div>
+            <button onclick="closeInfoModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center border border-slate-700">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+
+        <!-- Sekme Menüsü -->
+        <div class="flex space-x-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 overflow-x-auto no-scrollbar shrink-0">
+            <button id="info-tab-kvkk" onclick="switchInfoTab('kvkk')" class="flex-1 px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all text-slate-400 hover:text-slate-200">KVKK Metni</button>
+            <button id="info-tab-privacy" onclick="switchInfoTab('privacy')" class="flex-1 px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all text-slate-400 hover:text-slate-200">Gizlilik Politikası</button>
+            <button id="info-tab-terms" onclick="switchInfoTab('terms')" class="flex-1 px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all text-slate-400 hover:text-slate-200">Kullanım Koşulları</button>
+            <button id="info-tab-support" onclick="switchInfoTab('support')" class="flex-1 px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all text-slate-400 hover:text-slate-200">Geliştirici & Destek</button>
+            <button id="info-tab-about" onclick="switchInfoTab('about')" class="flex-1 px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all text-slate-400 hover:text-slate-200">Hakkında</button>
+        </div>
+
+        <!-- Sekme İçerik Alanı -->
+        <div class="flex-1 overflow-y-auto no-scrollbar pr-1 text-xs text-slate-300 leading-relaxed space-y-4">
+            
+            <!-- KVKK AYDINLATMA METNİ -->
+            <div id="info-content-kvkk" class="info-content-section hidden space-y-3">
+                <h4 class="text-sm font-bold text-cyan-400">6698 Sayılı KVKK Kapsamında Aydınlatma Metni</h4>
+                <p>CamPulse ("Uygulama"), kişisel verilerinizin güvenliğine ve gizliliğine azami önem vermektedir. 6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") uyarınca, veri sorumlusu sıfatıyla tarafımızca işlenen kişisel verileriniz aşağıda açıklanan kapsamda işlenmektedir.</p>
+                
+                <h5 class="font-bold text-white mt-2">1. İşlenen Kişisel Verileriniz</h5>
+                <ul class="list-disc pl-4 space-y-1 text-slate-400">
+                    <li>Kimlik ve İletişim Bilgileri: E-posta adresiniz, sistem tarafından atanan Benzersiz Kullanıcı Kimliği (User ID).</li>
+                    <li>Kullanım ve İşlem Verileri: Katıldığınız etkinlik listeleri, takvim senkronizasyon tercihleri, etkinlik puanlamalarınız.</li>
+                </ul>
+
+                <h5 class="font-bold text-white mt-2">2. Verilerin İşlenme Amacı</h5>
+                <p class="text-slate-400">Kişisel verileriniz; hesabınızın doğrulanması, kişiselleştirilmiş kampüs takviminizin oluşturulması, saat çakışması tespit sisteminin çalıştırılması ve hizmet kalitesinin artırılması amacıyla işlenmektedir.</p>
+
+                <h5 class="font-bold text-white mt-2">3. Verilerin Aktarılması ve Depolanması</h5>
+                <p class="text-slate-400">Verileriniz, bulut veritabanı altyapımız olan Supabase (PostgreSQL) üzerinde yüksek güvenlik standartları altında saklanmaktadır. Verileriniz üçüncü taraf reklamverenler veya ticari kurumlarla kesinlikle paylaşılmaz.</p>
+
+                <h5 class="font-bold text-white mt-2">4. Haklarınız (KVKK Madde 11)</h5>
+                <p class="text-slate-400">İlgili kişi olarak; verilerinizin işlenip işlenmediğini öğrenme, silinmesini veya düzeltilmesini talep etme hakkına sahipsiniz. Taleplerinizi Geliştirici & Destek sekmesindeki kanallardan iletebilirsiniz.</p>
+            </div>
+
+            <!-- GİZLİLİK POLİTİKASI -->
+            <div id="info-content-privacy" class="info-content-section hidden space-y-3">
+                <h4 class="text-sm font-bold text-cyan-400">Gizlilik Politikası</h4>
+                <p>Bu Gizlilik Politikası, CamPulse uygulamasını kullandığınızda bilgilerinizin nasıl toplandığını, kullanıldığını ve korunduğunu açıklar.</p>
+
+                <h5 class="font-bold text-white mt-2">1. Çerezler ve Yerel Depolama (LocalStorage)</h5>
+                <p class="text-slate-400">Uygulama, oturum durumunuzu korumak ve katıldığınız etkinlikleri cihazınızda hızlıca yükleyebilmek için tarayıcının LocalStorage ve SessionStorage özelliklerini kullanır. Reklam takip çerezleri kesinlikle kullanılmamaktadır.</p>
+
+                <h5 class="font-bold text-white mt-2">2. Veri Güvenliği</h5>
+                <p class="text-slate-400">Tüm iletişim HTTPS / SSL protokolleri ile şifrelenir. Veritabanı seviyesinde Satır Düzeyinde Güvenlik (Row Level Security - RLS) politikaları uygulanarak kullanıcı verilerinin izolasyonu sağlanmaktadır.</p>
+
+                <h5 class="font-bold text-white mt-2">3. Hesap Silme</h5>
+                <p class="text-slate-400">Hesabınızı ve hesabınıza bağlı verileri tamamen sildirmek için yönetici ile iletişime geçebilirsiniz. Silme işlemi sonrasında verileriniz sistemden geri döndürülemez şekilde kaldırılır.</p>
+            </div>
+
+            <!-- KULLANIM KOŞULLARI & YASAL UYARI -->
+            <div id="info-content-terms" class="info-content-section hidden space-y-3">
+                <h4 class="text-sm font-bold text-cyan-400">Kullanım Koşulları ve Yasal Uyarı</h4>
+                
+                <h5 class="font-bold text-white mt-2">1. Hizmet Şartları</h5>
+                <p class="text-slate-400">CamPulse, üniversite öğrencilerinin ve öğrenci kulüplerinin etkinlik koordinasyonunu kolaylaştırmak amacıyla sunulan bağımsız bir platformdur. Kullanıcılar sisteme doğru ve güncel e-posta adresleri ile kayıt olmakla yükümlüdür.</p>
+
+                <h5 class="font-bold text-white mt-2">2. Etkinlik İçerikleri ve Sorumluluk</h5>
+                <p class="text-slate-400">Sistemde yayınlanan etkinliklerin saati, konumu ve içeriğinden ilgili etkinlik yöneticisi sorumludur. CamPulse, kulüpler tarafından yapılan son dakika mekan/saat değişikliklerinden doğabilecek aksaklıklardan doğrudan sorumlu tutulamaz.</p>
+
+                <h5 class="font-bold text-white mt-2">3. Kötüye Kullanım</h5>
+                <p class="text-slate-400">Sistemin güvenliğini tehdit edecek, yetkisiz erişim denemelerinde bulunacak veya sahte içerik üretecek kullanıcıların hesapları askıya alınır.</p>
+            </div>
+
+            <!-- GELİŞTİRİCİ & DESTEK -->
+            <div id="info-content-support" class="info-content-section hidden space-y-3">
+                <h4 class="text-sm font-bold text-cyan-400">Geliştirici Ekibi ve Destek İletişim</h4>
+                <p class="text-slate-400">CamPulse, kampüs yaşamını dijitalleştirmek ve öğrenci kulüpleri arasındaki iletişimi güçlendirmek için geliştirilmiştir.</p>
+
+                <div class="p-3 bg-slate-900/80 rounded-2xl border border-slate-800 space-y-2 mt-2">
+                    <p class="font-bold text-white text-xs"><i class="fa-solid fa-code text-indigo-400 mr-1.5"></i> Proje Geliştiricisi</p>
+                    <p class="text-slate-300">Emirhan Bilir <span class="text-[10px] text-slate-500">(Bilgisayar Mühendisliği)</span></p>
+                    <div class="flex gap-2 pt-1">
+                        <a href="https://github.com/EmirhanBilir27" target="_blank" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold flex items-center gap-1"><i class="fa-brands fa-github"></i> GitHub</a>
+                        <a href="https://www.linkedin.com/in/emirhan-bilir" target="_blank" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold flex items-center gap-1"><i class="fa-brands fa-linkedin"></i> LinkedIn</a>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-slate-900/80 rounded-2xl border border-slate-800 space-y-2">
+                    <p class="font-bold text-white text-xs"><i class="fa-solid fa-headset text-cyan-400 mr-1.5"></i> Destek & Geri Bildirim</p>
+                    <p class="text-slate-400">Hata bildirimi, istek veya kulüp yönetici yetkisi talepleri için e-posta ile ulaşabilirsiniz:</p>
+                    <a href="mailto:emirhanbilir947@gmail.com" class="text-cyan-400 hover:underline font-semibold block"><i class="fa-solid fa-envelope mr-1"></i> emirhanbilir947@gmail.com</a>
+                </div>
+            </div>
+
+            <!-- UYGULAMA HAKKINDA -->
+            <div id="info-content-about" class="info-content-section hidden space-y-3">
+                <h4 class="text-sm font-bold text-cyan-400">CamPulse Hakkında</h4>
+                <p>CamPulse, üniversite kampüslerindeki kulüp etkinliklerini, ders dışı organizasyonları ve duyuruları tek bir dinamik takvimde birleştiren akıllı akış sistemidir.</p>
+
+                <h5 class="font-bold text-white mt-2">Öne Çıkan Özellikler</h5>
+                <ul class="list-disc pl-4 space-y-1 text-slate-400">
+                    <li><strong class="text-slate-200">Çakışma Analizi:</strong> Takviminize eklediğiniz etkinliklerin saat çakışmalarını anlık tespit eder.</li>
+                    <li><strong class="text-slate-200">ICS / Takvim Dışa Aktarımı:</strong> Etkinlikleri tek tıkla Apple veya Google Takviminize ekler.</li>
+                    <li><strong class="text-slate-200">Bulut Senkronizasyon:</strong> Giriş yaptığınız tüm cihazlarda takviminiz güncel kalır.</li>
+                    <li><strong class="text-slate-200">PWA ve Pull-to-Refresh:</strong> Mobil cihazlarda uygulama kalitesinde yenileme ve kullanım deneyimi sunar.</li>
+                </ul>
+
+                <div class="pt-2 border-t border-slate-800 text-[10px] text-slate-500 text-center">
+                    CamPulse v1.2 • HTML5, Tailwind CSS, JavaScript ES6 & Supabase Cloud
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
 </body>
 </html>
