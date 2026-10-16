@@ -1,229 +1,985 @@
-/* CamPulse - Supabase istemci uygulaması. Yetki denetimleri veritabanında yapılır. */
-'use strict';
+/**
+ * CamPulse - Akıllı Kampüs ve Kulüp Koordinasyon Sistemi
+ * Core Application Logic & Supabase Integration (Updated)
+ */
 
+// ==========================================
+// 1. SUPABASE BAĞLANTISI VE YAPILANDIRMA
+// ==========================================
 const SUPABASE_URL = 'https://yrkugifzbfxfszitjztr.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlya3VnaWZ6YmZ4ZnN6aXRqenRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5MDk2ODQsImV4cCI6MjEwNzQ4NTY4NH0.4iPf-dbN94DYb-PphCCTM-Tt7bvii4FEKfW8NN5WPPQ';
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-});
 
+// Supabase istemcisini başlat
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Fallback Yönetici Listesi (Veritabanından Çekilemezse Kullanılacak)
+let ADMIN_EMAILS = [
+    'emirhanbilir947@gmail.com', 
+    'osamaalhajomar7@gmail.com',
+    'emircicek73@gmail.com',
+    'abdulsametisan177@gmail.com',
+    'ma9034403@gmail.com',
+    'feyzafatallah71@gmail.com'
+];
+
+
+// ==========================================
+// 2. UYGULAMA DURUMU (STATE MANAGEMENT)
+// ==========================================
 const APP_STATE = {
-  calendarStartDate: new Date(), selectedDate: 'all', activeTab: 'all', events: [],
-  joinedEvents: [], currentUser: null, currentRole: 'student', currentModalEventId: null,
-  ratings: new Map(), busy: false
+    calendarStartDate: new Date(), // Yıllık takvimin başlangıç tarihi (oklarla değişir)
+    selectedDate: 'all',      // 'all' veya 'YYYY-MM-DD'
+    activeTab: 'all',         // 'all' (Tüm Etkinlikler) veya 'my-events' (Etkinliklerim)
+    events: [],               // Veritabanından çekilen ham etkinlikler
+    joinedEvents: [],         // Kullanıcının katıldığı etkinlik ID'leri (Bulut Senkronize)
+    currentUser: null         // Aktif oturum sahibi kullanıcı
 };
-const $ = id => document.getElementById(id);
-const ADMIN_EMAILS = [
-  'emirhanbilir947@gmail.com','osamaalhajomar7@gmail.com','emircicek73@gmail.com',
-  'abdulsametisan177@gmail.com','ma9034403@gmail.com','feyzafatallah71@gmail.com'
-]; // SQL tarafındaki allowlist ile aynı olmalı; gerçek yetkiyi DB belirler.
 
-function getLocalIsoDate(date) {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+let currentModalEventId = null;
+
+// ==========================================
+// PULL TO REFRESH (ANDROID / PWA) MANTIĞI
+// ==========================================
+let touchstartY = 0;
+document.addEventListener('touchstart', e => { 
+    touchstartY = e.touches[0].clientY; 
+}, {passive: true});
+
+document.addEventListener('touchend', e => {
+    const touchendY = e.changedTouches[0].clientY;
+    // Eğer sayfa en üstteyse ve aşağı doğru yeterince kaydırıldıysa
+    if (window.scrollY === 0 && (touchendY - touchstartY) > 120 && APP_STATE.currentUser) {
+        const ptr = document.getElementById('ptr-indicator');
+        const icon = document.getElementById('ptr-icon');
+        ptr.style.transform = 'translateY(80px)';
+        icon.classList.add('fa-spin');
+        
+        fetchEvents().then(() => {
+            setTimeout(() => {
+                ptr.style.transform = 'translateY(0)';
+                icon.classList.remove('fa-spin');
+                showToast("Akış yenilendi.", "info");
+            }, 500);
+        });
+    }
+}, {passive: true});
+
+
+// ==========================================
+// 3. BAŞLATMA VE OTURUM KONTROLÜ
+// ==========================================
+window.onload = async () => {
+    APP_STATE.calendarStartDate.setHours(0,0,0,0); // Saati sıfırla
+
+    // Bugünün tarihini form inputuna varsayılan ata
+    const todayStr = getLocalIsoDate(new Date());
+    if (document.getElementById('addDate')) {
+        document.getElementById('addDate').value = todayStr;
+    }
+
+    // Gerçek zamanlı oturum senkronizasyonu
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+            APP_STATE.currentUser = session.user;
+            loadJoinedEvents(); // Başka cihazda değiştiyse hemen yansır
+        }
+    });
+
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
+    
+    if (session && session.user) {
+        APP_STATE.currentUser = session.user;
+        await fetchAdmins(); // Dinamik Admin yetkilerini çek
+        showMainScreen(session.user);
+    } else {
+        document.getElementById('main-screen').style.display = 'none';
+        document.getElementById('auth-screen').style.display = 'flex';
+    }
+};
+
+async function fetchAdmins() {
+    // Veritabanında bir 'roles' veya 'profiles' tablosu olduğu varsayımıyla çalışır.
+    // Eğer tablo yoksa kod çökmez, hardcoded fallback listesini (ADMIN_EMAILS) kullanmaya devam eder.
+    try {
+        const { data, error } = await supabaseClient.from('profiles').select('email').eq('role', 'admin');
+        if (!error && data && data.length > 0) {
+            ADMIN_EMAILS = data.map(admin => admin.email);
+        }
+    } catch (e) {
+        console.log("Dinamik admin tablosu bulunamadı, varsayılan liste kullanılıyor.");
+    }
 }
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-}
-function showToast(message, type='success') {
-  const toast=$('toast'), msg=$('toastMsg'), icon=$('toastIcon'); if(!toast||!msg||!icon){console.log(message);return;}
-  msg.textContent=message;
-  const styles={success:['bg-emerald-600','fa-circle-check'],error:['bg-red-600','fa-triangle-exclamation'],warning:['bg-amber-600','fa-triangle-exclamation'],info:['bg-slate-700','fa-bell']};
-  const [bg,ico]=styles[type]||styles.success;
-  toast.className=`fixed bottom-6 right-6 ${bg} text-white font-semibold text-sm px-4 py-3 rounded-xl shadow-2xl transition-all duration-300 transform z-50 flex items-center space-x-2 max-w-sm`;
-  icon.className=`fa-solid ${ico} text-base`; toast.classList.remove('translate-y-24','opacity-0','pointer-events-none');
-  clearTimeout(window.campulseToastTimer); window.campulseToastTimer=setTimeout(()=>toast.classList.add('translate-y-24','opacity-0','pointer-events-none'),3500);
-}
-function showAuthMessage(message,type='error') {
-  const box=$('auth-message-box'); if(!box)return;
-  box.className='p-3 rounded-lg text-sm font-semibold flex items-center gap-2 border';
-  const color=type==='error'?'bg-red-500/10 text-red-400 border-red-500/20':type==='warning'?'bg-amber-500/10 text-amber-400 border-amber-500/20':'bg-green-500/10 text-emerald-400 border-green-500/20';
-  box.classList.add(...color.split(' ')); $('auth-message-text').textContent=message;
-  $('auth-message-icon').className=`fa-solid ${type==='error'?'fa-circle-exclamation':type==='warning'?'fa-triangle-exclamation':'fa-check-circle'}`;
-}
-function translateAuthError(message='') {
-  const m=message.toLowerCase();
-  if(m.includes('invalid login credentials'))return 'E-posta veya şifre hatalı.';
-  if(m.includes('email not confirmed'))return 'Lütfen önce e-posta adresinizi doğrulayın.';
-  if(m.includes('user already registered'))return 'Bu e-posta adresi zaten kayıtlı.';
-  if(m.includes('password should be at least'))return 'Şifreniz en az 6 karakter olmalıdır.';
-  if(m.includes('rate limit'))return 'Çok fazla deneme yapıldı. Lütfen biraz sonra tekrar deneyin.';
-  return message || 'Beklenmeyen bir hata oluştu.';
-}
-function setAuthLoading(action,loading) {
-  const btn=$(action+'-btn'), txt=$(action+'-text'), spinner=$(action+'-loader');
-  if(btn)btn.disabled=loading; if(txt)txt.classList.toggle('hidden',loading); if(spinner)spinner.classList.toggle('hidden',!loading);
-}
+
+
+// ==========================================
+// 4. KİMLİK DOĞRULAMA (AUTH) FONKSİYONLARI
+// ==========================================
 
 async function register() {
-  const email=$('email-input').value.trim().toLowerCase(), password=$('password-input').value;
-  if(!email||!password)return showAuthMessage('E-posta ve şifre alanları zorunludur.');
-  if(password.length<6)return showAuthMessage('Şifreniz en az 6 karakter olmalıdır.');
-  if(!$('kvkk-checkbox').checked)return showAuthMessage('Kayıt olmak için aydınlatma metnini ve sözleşmeyi kabul etmelisiniz.');
-  setAuthLoading('register',true);
-  try {
-    const {data,error}=await supabaseClient.auth.signUp({email,password});
-    if(error)throw error;
-    $('password-input').value='';
-    showAuthMessage(data.session?'Kayıt başarılı. Hesabınız açılıyor.':'Kayıt isteği alındı. E-posta doğrulaması açıksa gelen kutunuzu kontrol edin.','success');
-    if(data.session)await enterApp(data.user);
-  } catch(e){showAuthMessage(translateAuthError(e.message));} finally{setAuthLoading('register',false);}
-}
-async function login() {
-  const email=$('email-input').value.trim().toLowerCase(), password=$('password-input').value;
-  if(!email||!password)return showAuthMessage('Giriş için e-posta ve şifrenizi girin.');
-  setAuthLoading('login',true);
-  try {const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});if(error)throw error;await enterApp(data.user);}
-  catch(e){showAuthMessage(translateAuthError(e.message));} finally{setAuthLoading('login',false);}
-}
-async function resetPassword() {
-  const email=$('email-input').value.trim().toLowerCase();
-  if(!email)return showAuthMessage('Şifre sıfırlama bağlantısı için önce e-posta adresinizi yazın.','warning');
-  try {const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin+window.location.pathname});if(error)throw error;showAuthMessage('Şifre sıfırlama bağlantısı gönderildiyse e-posta kutunuzu kontrol edin.','success');}
-  catch(e){showAuthMessage(translateAuthError(e.message));}
-}
-async function logout() {
-  try {const {error}=await supabaseClient.auth.signOut();if(error)throw error;}
-  catch(e){showToast('Çıkış yapılamadı: '+translateAuthError(e.message),'error');return;}
-  APP_STATE.currentUser=null;APP_STATE.currentRole='student';APP_STATE.events=[];APP_STATE.joinedEvents=[];APP_STATE.ratings.clear();
-  $('main-screen').style.display='none';$('auth-screen').style.display='flex';$('password-input').value='';$('admin-panel').style.display='none';
-}
-async function enterApp(user) {
-  APP_STATE.currentUser=user;
-  $('auth-screen').style.display='none';$('main-screen').style.display='flex';$('user-email-display').textContent=user.email||'';
-  try {
-    const {data,error}=await supabaseClient.from('profiles').select('role').eq('id',user.id).maybeSingle();
-    if(error)throw error; APP_STATE.currentRole=data?.role==='admin'?'admin':'student';
-  } catch(e) { console.error('Profil/rol okunamadı:',e); APP_STATE.currentRole='student'; showToast('Profil bilgisi alınamadı; yönetici işlemleri kapalı. SQL kurulumunu kontrol edin.','warning'); }
-  $('admin-panel').style.display=APP_STATE.currentRole==='admin'?'block':'none';
-  APP_STATE.calendarStartDate=new Date();APP_STATE.calendarStartDate.setHours(0,0,0,0);
-  if($('addDate'))$('addDate').value=getLocalIsoDate(new Date());
-  renderDays(); await Promise.all([loadJoinedEvents(),fetchEvents(),loadMyRatings()]);
+    const email = document.getElementById('email-input').value.trim();
+    const password = document.getElementById('password-input').value.trim();
+    const kvkkChecked = document.getElementById('kvkk-checkbox').checked;
+    
+    if (!email || !password) {
+        showAuthMessage("E-posta ve şifre alanları boş bırakılamaz.", "error");
+        return;
+    }
+
+    if (!kvkkChecked) {
+        showAuthMessage("Kayıt olmak için KVKK ve Kullanıcı Sözleşmesi'ni kabul etmelisiniz.", "error");
+        return;
+    }
+
+    setAuthLoading('register', true);
+    
+    const { data, error } = await supabaseClient.auth.signUp({ 
+        email: email, 
+        password: password,
+        options: {
+            data: {
+                joinedEvents: [] 
+            }
+        }
+    });
+    
+    setAuthLoading('register', false);
+
+    if (error) {
+        showAuthMessage(translateAuthError(error.message), "error");
+    } else {
+        showAuthMessage("Kayıt başarılı! Hesabınız oluşturuldu, giriş yapabilirsiniz.", "success");
+        document.getElementById('password-input').value = '';
+    }
 }
 
-window.addEventListener('DOMContentLoaded',async()=>{
-  if(!$('auth-screen'))return;
-  $('main-screen').style.display='none';
-  const {data:{session},error}=await supabaseClient.auth.getSession();
-  if(error)console.error(error);
-  if(session?.user)await enterApp(session.user);else $('auth-screen').style.display='flex';
-  supabaseClient.auth.onAuthStateChange((event,session)=>{
-    if(event==='SIGNED_OUT'){APP_STATE.currentUser=null;$('main-screen').style.display='none';$('auth-screen').style.display='flex';}
-    else if(event==='SIGNED_IN'&&session?.user&&APP_STATE.currentUser?.id!==session.user.id){setTimeout(()=>enterApp(session.user),0);}
-  });
-  const form=$('quickAddForm');if(form)form.addEventListener('submit',handleAddEvent);
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeEventModal();closeKvkkModal();}});
-});
+async function login() {
+    const email = document.getElementById('email-input').value.trim();
+    const password = document.getElementById('password-input').value.trim();
+    
+    if (!email || !password) {
+        showAuthMessage("Giriş yapmak için e-posta ve şifrenizi girin.", "error");
+        return;
+    }
+
+    setAuthLoading('login', true);
+    
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ 
+        email: email, 
+        password: password 
+    });
+    
+    setAuthLoading('login', false);
+
+    if (error) {
+        showAuthMessage(translateAuthError(error.message), "error");
+    } else {
+        APP_STATE.currentUser = data.user;
+        await fetchAdmins();
+        showMainScreen(data.user);
+    }
+}
+
+async function resetPassword() {
+    const email = document.getElementById('email-input').value.trim();
+    if (!email) {
+        showAuthMessage("Şifre sıfırlama linki göndermek için e-posta adresinizi yazın.", "warning");
+        return;
+    }
+
+    const { data, error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.href,
+    });
+
+    if (error) {
+        showAuthMessage(translateAuthError(error.message), "error");
+    } else {
+        showAuthMessage("Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.", "success");
+    }
+}
+
+async function logout() {
+    await supabaseClient.auth.signOut();
+    
+    APP_STATE.currentUser = null;
+    APP_STATE.events = [];
+    APP_STATE.joinedEvents = [];
+    
+    document.getElementById('main-screen').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'flex';
+    
+    document.getElementById('password-input').value = '';
+    document.getElementById('auth-message-box').classList.add('hidden');
+    document.getElementById('admin-panel').style.display = 'none';
+}
+
+
+// ==========================================
+// 5. ANA EKRAN VE ARAYÜZ YÖNETİMİ
+// ==========================================
+function showMainScreen(user) {
+    if (!user) return;
+
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('main-screen').style.display = 'flex';
+    
+    document.getElementById('user-email-display').innerText = user.email;
+
+    const adminPanel = document.getElementById('admin-panel');
+    if (ADMIN_EMAILS.includes(user.email)) {
+        adminPanel.style.display = 'block';
+    } else {
+        adminPanel.style.display = 'none';
+    }
+
+    loadJoinedEvents();
+    renderDays();
+    fetchEvents();
+}
+
+function toggleAdminForm() {
+    const form = document.getElementById('quickAddForm');
+    form.style.display = (form.style.display === 'none') ? 'block' : 'none';
+}
+
+function setActiveTab(tab) {
+    APP_STATE.activeTab = tab;
+    
+    const tabAll = document.getElementById('tab-all');
+    const tabMy = document.getElementById('tab-my-events');
+    const daysContainer = document.getElementById('daysListContainer');
+
+    if (tab === 'all') {
+        tabAll.className = "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-md";
+        tabMy.className = "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200";
+        daysContainer.style.display = 'flex';
+    } else {
+        tabMy.className = "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-md";
+        tabAll.className = "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200";
+        daysContainer.style.display = 'none';
+    }
+
+    renderEvents();
+}
+
+
+// ==========================================
+// 6. VERİTABANI İŞLEMLERİ
+// ==========================================
 
 async function fetchEvents() {
-  const loader=$('loading-indicator'),container=$('eventsContainer'); if(loader)loader.style.display='flex';
-  try {
-    const {data,error}=await supabaseClient.from('events').select('*').order('date',{ascending:true}).order('start_time',{ascending:true});
-    if(error)throw error;APP_STATE.events=data||[];
-    const ids=new Set(APP_STATE.events.map(e=>e.id));APP_STATE.joinedEvents=APP_STATE.joinedEvents.filter(id=>ids.has(id));
-    updateJoinedBadge();renderEvents();
-  } catch(e) {console.error(e);if(container)container.innerHTML=`<div class="text-center py-10 rounded-3xl border border-red-900/50"><p class="text-red-400 font-bold">Etkinlikler yüklenemedi.</p><p class="text-xs text-red-400/70 mt-2">${escapeHtml(e.message)}</p></div>`;}
-  finally{if(loader)loader.style.display='none';}
-}
-async function loadJoinedEvents() {
-  if(!APP_STATE.currentUser)return;
-  try {
-    const {data,error}=await supabaseClient.from('event_participants').select('event_id').eq('user_id',APP_STATE.currentUser.id);
-    if(error)throw error;APP_STATE.joinedEvents=(data||[]).map(x=>x.event_id);updateJoinedBadge();renderEvents();
-  } catch(e) {console.error('Katılım listesi alınamadı:',e);APP_STATE.joinedEvents=[];showToast('Etkinlik takvimi yüklenemedi. SQL kurulumunu çalıştırın.','error');}
-}
-async function loadMyRatings() {
-  if(!APP_STATE.currentUser)return;
-  try {const {data,error}=await supabaseClient.from('event_ratings').select('event_id,rating').eq('user_id',APP_STATE.currentUser.id);if(error)throw error;APP_STATE.ratings=new Map((data||[]).map(x=>[x.event_id,x.rating]));}
-  catch(e){console.warn('Puanlar yüklenemedi:',e);}
-}
-function toggleAdminForm(){const f=$('quickAddForm');if(f)f.style.display=getComputedStyle(f).display==='none'?'block':'none';}
-function setActiveTab(tab) {
-  APP_STATE.activeTab=tab;const all=$('tab-all'),mine=$('tab-my-events'),days=$('daysListContainer');
-  const active='flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-md';
-  const inactive='flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200';
-  all.className=tab==='all'?active:inactive;mine.className=tab==='my-events'?active:inactive;days.style.display=tab==='all'?'flex':'none';renderEvents();
-}
-function shiftCalendar(days){APP_STATE.calendarStartDate.setDate(APP_STATE.calendarStartDate.getDate()+days);renderDays();}
-function renderDays(){
-  const c=$('daysList');if(!c)return;let html=`<button onclick="setDateFilter('all')" class="flex-1 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 ${APP_STATE.selectedDate==='all'?'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white':'bg-slate-800 text-slate-400 border border-slate-700'}">Tümü</button>`;
-  const days=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'],months=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
-  for(let i=0;i<7;i++){const d=new Date(APP_STATE.calendarStartDate);d.setDate(d.getDate()+i);const iso=getLocalIsoDate(d),label=iso===getLocalIsoDate(new Date())?'Bugün':`${d.getDate()} ${months[d.getMonth()]} ${days[d.getDay()]}`;
-    html+=`<button onclick="setDateFilter('${iso}')" class="flex-1 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 ${iso===APP_STATE.selectedDate?'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white':'bg-slate-800 text-slate-400 border border-slate-700'}">${label}</button>`;}
-  c.innerHTML=html;
-}
-function setDateFilter(date){APP_STATE.selectedDate=date;renderDays();renderEvents();}
-function parseEventData(ev){
-  const date=String(ev.date||'').slice(0,10),start=String(ev.start_time||'').slice(0,5),end=String(ev.end_time||'').slice(0,5);
-  const d=new Date(`${date}T12:00:00`),months=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'],days=['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
-  const formattedDate=Number.isNaN(d.getTime())?date:`${d.getDate()} ${months[d.getMonth()]} ${days[d.getDay()]}`;
-  return {clubName:ev.club_name||'Kampüs Etkinliği',location:ev.location||'Belirtilmedi',pureDesc:ev.description||'Açıklama belirtilmedi.',startTime:start,endTime:end,timeStr:`${start}-${end}`,isoDateOnly:date,formattedDate,imageUrl:ev.image_url||null,participantsCount:Number(ev.participants_count)||0};
-}
-function renderEvents(){
-  const container=$('eventsContainer');if(!container)return;const query=($('searchInput')?.value||'').trim().toLocaleLowerCase('tr');
-  const filtered=APP_STATE.events.filter(ev=>{const p=parseEventData(ev),matchesDate=APP_STATE.activeTab!=='all'||APP_STATE.selectedDate==='all'||p.isoDateOnly===APP_STATE.selectedDate;
-    const matchesSearch=[ev.title,p.pureDesc,p.clubName,p.location].some(x=>String(x||'').toLocaleLowerCase('tr').includes(query));return matchesDate&&matchesSearch&&(APP_STATE.activeTab!=='my-events'||APP_STATE.joinedEvents.includes(ev.id));});
-  if(!filtered.length){container.innerHTML=`<div class="text-center py-16 bg-slate-800/30 rounded-3xl border border-dashed border-slate-700/50"><div class="text-slate-300 font-bold mb-1">${APP_STATE.activeTab==='my-events'?'Takviminizde etkinlik yok':'Etkinlik bulunamadı'}</div><p class="text-xs text-slate-500">Aramanızı veya tarih seçiminizi değiştirebilirsiniz.</p></div>`;return;}
-  container.innerHTML=filtered.map(ev=>{const p=parseEventData(ev),joined=APP_STATE.joinedEvents.includes(ev.id),conflict=joined&&checkEventConflict(ev.id),admin=APP_STATE.currentRole==='admin';
-    const image=p.imageUrl?`<div class="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-slate-800 border border-slate-700"><img src="${escapeHtml(p.imageUrl)}" class="w-full h-full object-cover" alt="Etkinlik afişi" loading="lazy"></div>`:'';
-    return `<article onclick="openEventModal('${ev.id}')" class="event-card cursor-pointer rounded-3xl p-5 border ${conflict?'conflict-card bg-red-950/20':joined?'border-emerald-500/50 bg-emerald-950/10':'border-slate-700/60'} space-y-4"><div class="flex items-start justify-between gap-4"><div class="space-y-1.5 flex-1 min-w-0"><div class="flex items-center gap-2 flex-wrap"><span class="text-[10px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-md">${escapeHtml(p.clubName)}</span>${APP_STATE.activeTab==='my-events'||APP_STATE.selectedDate==='all'?`<span class="text-[10px] font-bold text-cyan-300 bg-cyan-500/10 px-2.5 py-0.5 rounded-md">${escapeHtml(p.formattedDate)}</span>`:''}${conflict?'<span class="text-[10px] font-black text-red-400">⚠ Saat çakışması</span>':''}<span class="text-[10px] text-orange-300">${p.participantsCount} katılımcı</span></div><h3 class="font-bold text-lg text-white leading-snug">${escapeHtml(ev.title)}</h3></div>${image}${admin?`<button aria-label="Etkinliği sil" onclick="event.stopPropagation();deleteEvent('${ev.id}')" class="shrink-0 w-8 h-8 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20"><i class="fa-solid fa-trash-can"></i></button>`:''}</div><p class="text-sm text-slate-400 leading-relaxed line-clamp-2">${escapeHtml(p.pureDesc)}</p><div class="flex items-center justify-between gap-3 pt-3 border-t border-slate-700/50 text-xs"><div class="flex items-center gap-2 min-w-0 text-slate-300"><span><i class="fa-regular fa-clock text-cyan-400"></i> ${escapeHtml(p.timeStr)}</span><span>•</span><span class="truncate"><i class="fa-solid fa-location-dot text-indigo-400"></i> ${escapeHtml(p.location)}</span></div><button onclick="event.stopPropagation();toggleJoin('${ev.id}')" class="shrink-0 px-4 py-2 rounded-xl text-xs font-bold ${joined?'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30':'bg-slate-700 text-white hover:bg-indigo-600'}">${joined?'✓ Katılıyorsun':'＋ Katıl'}</button></div></article>`;
-  }).join('');
-}
-function updateJoinedBadge(){if($('joinedCountBadge'))$('joinedCountBadge').textContent=APP_STATE.joinedEvents.length;}
-function checkEventConflict(id){const a=APP_STATE.events.find(e=>e.id===id);if(!a)return false;const p=parseEventData(a),as=p.startTime,ae=p.endTime;if(!as||!ae)return false;return APP_STATE.joinedEvents.some(otherId=>{if(otherId===id)return false;const b=APP_STATE.events.find(e=>e.id===otherId);if(!b)return false;const q=parseEventData(b);return p.isoDateOnly===q.isoDateOnly&&as<q.endTime&&ae>q.startTime;});}
+    const loader = document.getElementById('loading-indicator');
+    const container = document.getElementById('eventsContainer');
+    
+    loader.style.display = 'flex';
+    container.innerHTML = '';
 
-async function toggleJoin(eventId){
-  if(!APP_STATE.currentUser)return showToast('Katılmak için giriş yapın.','warning');
-  const joined=APP_STATE.joinedEvents.includes(eventId);
-  try {
-    if(joined){const {error}=await supabaseClient.from('event_participants').delete().eq('event_id',eventId).eq('user_id',APP_STATE.currentUser.id);if(error)throw error;APP_STATE.joinedEvents=APP_STATE.joinedEvents.filter(id=>id!==eventId);showToast('Etkinlik takviminizden çıkarıldı.','info');}
-    else {const {error}=await supabaseClient.from('event_participants').insert({event_id:eventId,user_id:APP_STATE.currentUser.id});if(error){if(error.code==='23505')throw new Error('Bu etkinliğe zaten katılmışsınız.');throw error;}APP_STATE.joinedEvents.push(eventId);showToast(checkEventConflict(eventId)?'Etkinliğe katıldınız ancak saat çakışması var.':'Etkinlik takviminize eklendi.',checkEventConflict(eventId)?'warning':'success');}
-    await fetchEvents();if(APP_STATE.currentModalEventId===eventId)openEventModal(eventId);
-  } catch(e){showToast('Katılım işlemi yapılamadı: '+e.message,'error');await loadJoinedEvents();}
-}
-async function handleAddEvent(e){
-  e.preventDefault();if(APP_STATE.currentRole!=='admin')return showToast('Bu işlem için yönetici yetkisi gerekiyor.','error');
-  const btn=$('submit-event-btn'),old=btn.innerHTML;btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Kaydediliyor...';let uploadedPath=null;
-  try {
-    const title=$('addTitle').value.trim(),club=$('addClub').value.trim(),location=$('addLocation').value.trim(),date=$('addDate').value,start=$('addStartTime').value,end=$('addEndTime').value,description=$('addDesc').value.trim(),file=$('addPoster').files?.[0];
-    if(!title||!club||!location||!date||!start||!end)throw new Error('Zorunlu alanları doldurun.');if(end<=start)throw new Error('Bitiş saati başlangıç saatinden sonra olmalıdır.');
-    let imageUrl=null;
-    if(file){if(!file.type.startsWith('image/'))throw new Error('Afiş dosyası bir resim olmalıdır.');if(file.size>5*1024*1024)throw new Error('Afiş en fazla 5 MB olabilir.');const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');uploadedPath=`${crypto.randomUUID()}.${ext}`;
-      const {error:uploadError}=await supabaseClient.storage.from('event-posters').upload(uploadedPath,file,{contentType:file.type,upsert:false});if(uploadError)throw uploadError;imageUrl=supabaseClient.storage.from('event-posters').getPublicUrl(uploadedPath).data.publicUrl;}
-    const {error}=await supabaseClient.from('events').insert({title,club_name:club,location,date,start_time:start,end_time:end,description,image_url:imageUrl});if(error)throw error;
-    showToast('Etkinlik başarıyla yayınlandı.','success');$('quickAddForm').reset();$('addDate').value=getLocalIsoDate(new Date());$('quickAddForm').style.display='none';await fetchEvents();
-  } catch(err){console.error(err);if(uploadedPath)await supabaseClient.storage.from('event-posters').remove([uploadedPath]);showToast('Etkinlik eklenemedi: '+err.message,'error');}
-  finally{btn.disabled=false;btn.innerHTML=old;}
-}
-async function deleteEvent(id){
-  if(APP_STATE.currentRole!=='admin')return showToast('Yönetici yetkisi gerekli.','error');const ev=APP_STATE.events.find(x=>x.id===id);if(!ev||!confirm(`“${ev.title}” etkinliği silinsin mi?`))return;
-  try{const {error}=await supabaseClient.from('events').delete().eq('id',id);if(error)throw error;if(APP_STATE.currentModalEventId===id)closeEventModal();showToast('Etkinlik silindi.','success');await Promise.all([fetchEvents(),loadJoinedEvents()]);}
-  catch(e){showToast('Etkinlik silinemedi: '+e.message,'error');}
-}
-function openEventModal(id){
-  const ev=APP_STATE.events.find(x=>x.id===id);if(!ev)return;APP_STATE.currentModalEventId=id;const p=parseEventData(ev),joined=APP_STATE.joinedEvents.includes(id),ended=new Date(`${p.isoDateOnly}T${p.endTime}:00`)<new Date();
-  $('modalTitle').textContent=ev.title;$('modalTime').textContent=`${p.formattedDate} | ${p.timeStr}`;$('modalLocation').textContent=p.location;$('modalDescription').textContent=p.pureDesc;$('modalBadges').innerHTML=`<span class="text-[11px] font-black uppercase text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-md">${escapeHtml(p.clubName)}</span>`;
-  $('modalConflictAlert').classList.toggle('hidden',!checkEventConflict(id));$('modalParticipantsCount').classList.toggle('hidden',p.participantsCount===0);$('pCountText').textContent=p.participantsCount;
-  if(p.imageUrl){$('modalPoster').src=p.imageUrl;$('modalPosterContainer').classList.remove('hidden');$('modalHeaderSection').classList.add('-mt-8');}else{$('modalPoster').removeAttribute('src');$('modalPosterContainer').classList.add('hidden');$('modalHeaderSection').classList.remove('-mt-8');}
-  const rating=$('modalRatingSection');rating.classList.toggle('hidden',!(ended&&joined));const current=APP_STATE.ratings.get(id)||0;$('starContainer').innerHTML=[1,2,3,4,5].map(n=>`<button aria-label="${n} yıldız" onclick="rateEvent('${id}',${n})" class="${n<=current?'text-amber-400':'text-slate-500'} hover:text-amber-300"><i class="fa-${n<=current?'solid':'regular'} fa-star"></i></button>`).join('');
-  $('modalActionContainer').innerHTML=ended?'<span class="text-xs font-bold text-slate-500 bg-slate-800 px-4 py-2 rounded-xl">Etkinlik sona erdi</span>':`<button onclick="toggleJoin('${id}')" class="px-6 py-2.5 rounded-xl text-xs font-bold ${joined?'bg-red-500/20 text-red-400 border border-red-500/40':'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white'}">${joined?'Takvimimden çıkar':'Takvime ekle'}</button>`;
-  $('eventDetailModal').classList.remove('hidden');document.body.style.overflow='hidden';
-}
-function closeEventModal(){$('eventDetailModal')?.classList.add('hidden');document.body.style.overflow='';APP_STATE.currentModalEventId=null;}
-async function rateEvent(eventId,rating){
-  if(!APP_STATE.currentUser)return showToast('Puan vermek için giriş yapın.','warning');if(!APP_STATE.joinedEvents.includes(eventId))return showToast('Yalnızca katıldığınız etkinlikleri puanlayabilirsiniz.','warning');
-  try{const {error}=await supabaseClient.from('event_ratings').upsert({event_id:eventId,user_id:APP_STATE.currentUser.id,rating},{onConflict:'event_id,user_id'});if(error)throw error;APP_STATE.ratings.set(eventId,rating);showToast('Puanınız kaydedildi.','success');openEventModal(eventId);}
-  catch(e){showToast('Puan kaydedilemedi: '+e.message,'error');}
-}
-function downloadICS(){
-  const ev=APP_STATE.events.find(x=>x.id===APP_STATE.currentModalEventId);if(!ev)return;const p=parseEventData(ev);if(!p.startTime||!p.endTime)return showToast('Etkinlik saati eksik.','error');
-  const dt=(date,time)=>new Date(`${date}T${time}:00`).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
-  const esc=s=>String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');
-  const content=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//CamPulse//TR','CALSCALE:GREGORIAN','BEGIN:VEVENT',`UID:${ev.id}@campulse`,`DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'')}`,`DTSTART:${dt(p.isoDateOnly,p.startTime)}`,`DTEND:${dt(p.isoDateOnly,p.endTime)}`,`SUMMARY:${esc(ev.title)}`,`LOCATION:${esc(p.location)}`,`DESCRIPTION:${esc(p.pureDesc)}`,'END:VEVENT','END:VCALENDAR'].join('\r\n');
-  const url=URL.createObjectURL(new Blob([content],{type:'text/calendar;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=`${String(ev.title).replace(/[^a-z0-9-_]/gi,'_')}.ics`;a.click();URL.revokeObjectURL(url);showToast('Takvim dosyası indirildi.','success');
-}
-function openKvkkModal(e){e?.preventDefault();$('kvkkModal')?.classList.remove('hidden');}function closeKvkkModal(){$('kvkkModal')?.classList.add('hidden');}
+    const { data: events, error } = await supabaseClient
+        .from('events')
+        .select('*')
+        .order('date', { ascending: true }); // Tarihe göre sırala
+    
+    loader.style.display = 'none';
 
-// Basit pull-to-refresh; modal açıkken çalışmaz.
-let touchY=0;document.addEventListener('touchstart',e=>{touchY=window.scrollY===0?e.touches[0].clientY:0;},{passive:true});
-document.addEventListener('touchend',e=>{if(touchY&&window.scrollY===0&&e.changedTouches[0].clientY-touchY>120&&APP_STATE.currentUser&&!$('eventDetailModal').classList.contains('hidden'))return;if(touchY&&window.scrollY===0&&e.changedTouches[0].clientY-touchY>120&&APP_STATE.currentUser){fetchEvents();loadJoinedEvents();}touchY=0;},{passive:true});
+    if (error) {
+        console.error("Etkinlikler çekilemedi:", error);
+        container.innerHTML = `
+            <div class="text-center py-10 bg-red-950/20 rounded-3xl border border-red-900/50">
+                <p class="text-red-400 font-bold">Veriler yüklenirken bir hata oluştu.</p>
+                <p class="text-xs text-red-400/60 mt-2">${escapeHtml(error.message)}</p>
+            </div>
+        `;
+        return;
+    }
+
+    APP_STATE.events = events || [];
+
+    // GÜNCELLEME (BUG FİX): Veritabanından silinmiş ama kullanıcının hesabında kalmış "hayalet" etkinlikleri temizle
+    if (APP_STATE.joinedEvents.length > 0) {
+        const validJoinedEvents = APP_STATE.joinedEvents.filter(eventId => 
+            APP_STATE.events.some(ev => ev.id === eventId)
+        );
+        
+        // Hayalet etkinlikler tespit edilirse listeyi temizle ve buluta (Supabase) senkronize et
+        if (validJoinedEvents.length !== APP_STATE.joinedEvents.length) {
+            APP_STATE.joinedEvents = validJoinedEvents;
+            saveJoinedEvents();
+        }
+    }
+
+    updateJoinedBadge();
+    renderEvents();
+}
+
+// ==========================================
+// 7. ARAYÜZ (UI) OLUŞTURUCULARI & RENDER (Yıllık Takvim Entegresi)
+// ==========================================
+
+function shiftCalendar(days) {
+    const newDate = new Date(APP_STATE.calendarStartDate);
+    newDate.setDate(newDate.getDate() + days);
+    APP_STATE.calendarStartDate = newDate;
+    renderDays();
+}
+
+function renderDays() {
+    const container = document.getElementById('daysList');
+    
+    let html = '';
+    
+    const isAllActive = APP_STATE.selectedDate === 'all';
+    html += `
+        <button onclick="setDateFilter('all')" class="flex-1 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+            isAllActive 
+            ? 'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)] border border-indigo-400/30' 
+            : 'bg-slate-800/90 text-slate-400 border border-slate-700/60 hover:border-slate-600 hover:text-slate-200'
+        }">
+            Tümü
+        </button>
+    `;
+
+    // Seçili takvim tarihinden itibaren 7 gün renderla
+    const dayNames = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+    const monthNames = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+
+    for (let i = 0; i < 7; i++) {
+        const current = new Date(APP_STATE.calendarStartDate);
+        current.setDate(current.getDate() + i);
+        
+        const dateString = getLocalIsoDate(current); // YYYY-MM-DD
+        const active = dateString === APP_STATE.selectedDate;
+        
+        const dayName = dayNames[current.getDay()];
+        const dayNum = current.getDate();
+        const monthName = monthNames[current.getMonth()];
+        
+        let label = `${dayNum} ${monthName} ${dayName}`;
+        if (dateString === getLocalIsoDate(new Date())) label = "Bugün";
+
+        html += `
+            <button onclick="setDateFilter('${dateString}')" class="flex-1 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+                active 
+                ? 'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)] border border-indigo-400/30' 
+                : 'bg-slate-800/90 text-slate-400 border border-slate-700/60 hover:border-slate-600 hover:text-slate-200'
+            }">
+                ${label}
+            </button>
+        `;
+    }
+
+    container.innerHTML = html;
+}
+
+function setDateFilter(dateStr) {
+    APP_STATE.selectedDate = dateStr;
+    renderDays();
+    renderEvents();
+}
+
+function renderEvents() {
+    const container = document.getElementById('eventsContainer');
+    const query = (document.getElementById('searchInput').value || '').toLowerCase();
+    
+    let filtered = [];
+
+    if (APP_STATE.activeTab === 'all') {
+        filtered = APP_STATE.events.filter(ev => {
+            const parsed = parseEventData(ev);
+            const matchesDate = APP_STATE.selectedDate === 'all' ? true : parsed.isoDateOnly === APP_STATE.selectedDate;
+            const matchesSearch = ev.title.toLowerCase().includes(query) || 
+                                  parsed.pureDesc.toLowerCase().includes(query) ||
+                                  parsed.clubName.toLowerCase().includes(query);
+            return matchesDate && matchesSearch;
+        });
+
+        // Tarih ve saate göre sırala
+        filtered.sort((a, b) => {
+            const pA = parseEventData(a);
+            const pB = parseEventData(b);
+            if (pA.isoDateOnly !== pB.isoDateOnly) return new Date(a.date) - new Date(b.date);
+            return pA.startVal - pB.startVal;
+        });
+
+    } else {
+        filtered = APP_STATE.events.filter(ev => {
+            const isJoined = APP_STATE.joinedEvents.includes(ev.id);
+            const parsed = parseEventData(ev);
+            const matchesSearch = ev.title.toLowerCase().includes(query) || 
+                                  parsed.pureDesc.toLowerCase().includes(query) ||
+                                  parsed.clubName.toLowerCase().includes(query);
+            return isJoined && matchesSearch;
+        });
+
+        filtered.sort((a, b) => {
+            const pA = parseEventData(a);
+            const pB = parseEventData(b);
+            if (pA.isoDateOnly !== pB.isoDateOnly) return new Date(a.date) - new Date(b.date);
+            return pA.startVal - pB.startVal;
+        });
+    }
+
+    if (filtered.length === 0) {
+        const isMyTab = APP_STATE.activeTab === 'my-events';
+        container.innerHTML = `
+            <div class="text-center py-16 bg-slate-800/30 rounded-3xl border border-dashed border-slate-700/50">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-800 mb-4 shadow-inner">
+                    <i class="fa-regular ${isMyTab ? 'fa-bookmark' : 'fa-calendar-xmark'} text-2xl text-slate-500"></i>
+                </div>
+                <h3 class="text-slate-300 font-bold mb-1">${isMyTab ? 'Takviminizde Etkinlik Yok' : 'Etkinlik Bulunamadı'}</h3>
+                <p class="text-xs text-slate-500 max-w-xs mx-auto">
+                    ${isMyTab 
+                        ? 'Henüz hiçbir etkinliğe katılmadınız. "Tüm Etkinlikler" sekmesinden ilgilendiğiniz ders veya kulüpleri takviminize ekleyebilirsiniz.' 
+                        : 'Bu güne veya arama kriterine uygun bir etkinlik henüz planlanmamış.'}
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = filtered.map(ev => {
+        const parsed = parseEventData(ev);
+        const isJoined = APP_STATE.joinedEvents.includes(ev.id);
+        const isAdmin = APP_STATE.currentUser && ADMIN_EMAILS.includes(APP_STATE.currentUser.email);
+        
+        const hasConflict = isJoined && checkEventConflict(ev.id);
+        const showDayBadge = APP_STATE.activeTab === 'my-events' || APP_STATE.selectedDate === 'all';
+        const participantCountText = parsed.participantsCount > 0 ? `<i class="fa-solid fa-fire text-orange-500 mr-1"></i> ${parsed.participantsCount} Katılımcı` : '';
+
+        // Eğer afiş varsa, küçük bir thumbnail gösterelim
+        const thumbnailHtml = parsed.imageUrl ? `
+            <div class="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-slate-800 border border-slate-700">
+                <img src="${parsed.imageUrl}" class="w-full h-full object-cover" alt="Afiş">
+            </div>
+        ` : '';
+
+        return `
+            <div id="event-card-${ev.id}" 
+                 onclick="handleCardClick(event, '${ev.id}')"
+                 class="event-card cursor-pointer rounded-3xl p-5 border transition-all ${
+                    hasConflict 
+                    ? 'conflict-card bg-red-950/20' 
+                    : isJoined 
+                        ? 'border-emerald-500/50 bg-emerald-950/10' 
+                        : 'border-slate-700/60'
+                 } space-y-4">
+                
+                <div class="flex items-start justify-between gap-4">
+                    <div class="space-y-1.5 flex-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="inline-block text-[10px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-md border border-indigo-500/20">
+                                ${escapeHtml(parsed.clubName)}
+                            </span>
+                            ${showDayBadge ? `
+                                <span class="inline-block text-[10px] font-bold text-cyan-300 bg-cyan-500/10 px-2.5 py-0.5 rounded-md border border-cyan-500/20">
+                                    <i class="fa-regular fa-calendar mr-1"></i>${parsed.formattedDate}
+                                </span>
+                            ` : ''}
+                            ${hasConflict ? `
+                                <span class="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-400 bg-red-500/20 px-2 py-0.5 rounded-md border border-red-500/40" title="Takviminizde aynı saatte katıldığınız başka bir etkinlik var!">
+                                    <i class="fa-solid fa-triangle-exclamation text-red-500 animate-pulse"></i>
+                                    Saat Çakışması!
+                                </span>
+                            ` : ''}
+                            ${participantCountText ? `
+                                <span class="inline-block text-[10px] font-bold text-orange-300 bg-orange-500/10 px-2.5 py-0.5 rounded-md border border-orange-500/20">
+                                    ${participantCountText}
+                                </span>
+                            ` : ''}
+                        </div>
+                        <h3 class="font-bold text-lg text-white leading-snug">${escapeHtml(ev.title)}</h3>
+                    </div>
+                    
+                    ${thumbnailHtml}
+
+                    ${isAdmin ? `
+                        <button onclick="event.stopPropagation(); deleteEvent('${ev.id}', '${escapeHtml(ev.title)}')" class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-colors border border-red-500/20">
+                            <i class="fa-solid fa-trash-can text-sm"></i>
+                        </button>
+                    ` : ''}
+                </div>
+
+                <p class="text-sm text-slate-400 leading-relaxed line-clamp-2">${escapeHtml(parsed.pureDesc)}</p>
+
+                <div class="flex items-center justify-between pt-3 border-t border-slate-700/50 text-xs">
+                    <div class="flex items-center space-x-3 font-medium text-slate-300">
+                        <span class="flex items-center gap-1.5"><i class="fa-regular fa-clock text-cyan-400"></i> ${escapeHtml(parsed.timeStr)}</span>
+                        <span class="text-slate-600">•</span>
+                        <span class="flex items-center gap-1.5 truncate max-w-[120px]"><i class="fa-solid fa-location-dot text-indigo-400"></i> ${escapeHtml(parsed.location)}</span>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <button onclick="event.stopPropagation(); toggleJoin('${ev.id}')" class="px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                            isJoined 
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 group' 
+                            : 'bg-slate-700/80 text-white hover:bg-indigo-600'
+                        }">
+                            <i class="fa-solid ${isJoined ? 'fa-check group-hover:hidden' : 'fa-plus'} mr-1"></i>
+                            <i class="fa-solid fa-xmark hidden group-hover:inline-block mr-1"></i>
+                            <span class="group-hover:hidden">${isJoined ? 'Katılıyorsun' : 'Katıl'}</span>
+                            <span class="hidden group-hover:inline-block">Vazgeç</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+
+// ==========================================
+// 8. ETKİNLİK DETAY MODALI VE RATING
+// ==========================================
+
+function handleCardClick(event, eventId) {
+    openEventModal(eventId);
+}
+
+function openEventModal(eventId) {
+    const ev = APP_STATE.events.find(e => e.id === eventId);
+    if (!ev) return;
+
+    currentModalEventId = eventId;
+    const parsed = parseEventData(ev);
+    const isJoined = APP_STATE.joinedEvents.includes(ev.id);
+    const hasConflict = isJoined && checkEventConflict(ev.id);
+
+    // Afiş Yönetimi
+    const posterContainer = document.getElementById('modalPosterContainer');
+    const posterImg = document.getElementById('modalPoster');
+    const headerSection = document.getElementById('modalHeaderSection');
+    
+    if (parsed.imageUrl) {
+        posterImg.src = parsed.imageUrl;
+        posterContainer.classList.remove('hidden');
+        headerSection.classList.add('-mt-8'); // Resim üzerine bindirme efekti
+    } else {
+        posterImg.src = '';
+        posterContainer.classList.add('hidden');
+        headerSection.classList.remove('-mt-8');
+    }
+
+    document.getElementById('modalTitle').innerText = ev.title;
+    document.getElementById('modalTime').innerText = `${parsed.formattedDate} | ${parsed.timeStr}`;
+    document.getElementById('modalLocation').innerText = parsed.location;
+    document.getElementById('modalDescription').innerText = parsed.pureDesc;
+
+    // Katılımcı Sayısı
+    const pCountElem = document.getElementById('modalParticipantsCount');
+    if (parsed.participantsCount > 0) {
+        document.getElementById('pCountText').innerText = parsed.participantsCount;
+        pCountElem.classList.remove('hidden');
+    } else {
+        pCountElem.classList.add('hidden');
+    }
+
+    const badgesContainer = document.getElementById('modalBadges');
+    badgesContainer.innerHTML = `
+        <span class="text-[11px] font-black uppercase text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-md border border-indigo-500/20">
+            ${escapeHtml(parsed.clubName)}
+        </span>
+    `;
+
+    const alertBox = document.getElementById('modalConflictAlert');
+    if (hasConflict) {
+        alertBox.classList.remove('hidden');
+    } else {
+        alertBox.classList.add('hidden');
+    }
+
+    // Geçmiş Etkinlik Rating Kontrolü
+    const ratingSection = document.getElementById('modalRatingSection');
+    const starContainer = document.getElementById('starContainer');
+    
+    // Etkinliğin bitiş zamanı geçti mi? (Tarih + endVal saat)
+    const eventEndDate = new Date(ev.date);
+    eventEndDate.setHours(Math.floor(parsed.endVal), (parsed.endVal % 1) * 60, 0, 0);
+    
+    if (new Date() > eventEndDate && isJoined) {
+        ratingSection.classList.remove('hidden');
+        // Kullanıcı daha önce oy verdi mi diye lokal kontrol yapılabilir, basitleştirmek için statik 5 yıldız çiziyoruz
+        let starsHtml = '';
+        for (let i = 1; i <= 5; i++) {
+            starsHtml += `<i class="fa-regular fa-star cursor-pointer hover:text-amber-400 text-slate-500 transition-colors" onclick="rateEvent('${ev.id}', ${i}, this)"></i>`;
+        }
+        starContainer.innerHTML = starsHtml;
+    } else {
+        ratingSection.classList.add('hidden');
+    }
+
+    const actionContainer = document.getElementById('modalActionContainer');
+    // Eğer etkinlik bitmişse, Katıl butonuna gerek yok
+    if (new Date() > eventEndDate) {
+        actionContainer.innerHTML = `<span class="text-xs font-bold text-slate-500 bg-slate-800 px-4 py-2 rounded-xl">Etkinlik Sona Erdi</span>`;
+    } else {
+        actionContainer.innerHTML = `
+            <button id="modalJoinBtn" onclick="toggleJoin('${ev.id}')" class="px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg ${
+                isJoined 
+                ? 'bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white' 
+                : 'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white hover:from-indigo-400 hover:to-cyan-400'
+            }">
+                <i class="fa-solid ${isJoined ? 'fa-xmark' : 'fa-plus'} mr-1.5"></i>
+                ${isJoined ? 'Takvimimden Çıkar' : 'Takvime Ekle'}
+            </button>
+        `;
+    }
+
+    const modal = document.getElementById('eventDetailModal');
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeEventModal() {
+    const modal = document.getElementById('eventDetailModal');
+    modal.classList.add('hidden');
+    document.body.style.overflow = 'auto';
+    currentModalEventId = null;
+}
+
+// Rating gönderme (Veritabanında `event_ratings` tablosu gerektirir, yoksa sadece görsel efekt)
+async function rateEvent(eventId, rating, element) {
+    const stars = element.parentElement.children;
+    for (let i = 0; i < 5; i++) {
+        stars[i].className = i < rating 
+            ? "fa-solid fa-star text-amber-400 cursor-pointer transition-all scale-110" 
+            : "fa-regular fa-star text-slate-500 cursor-pointer transition-all";
+    }
+    showToast(`Etkinliğe ${rating} yıldız verdiniz!`, 'success');
+
+    // DB kaydı (Hata verirse yoksayılır)
+    try {
+        await supabaseClient.from('event_ratings').insert([
+            { event_id: eventId, user_id: APP_STATE.currentUser.id, rating: rating }
+        ]);
+    } catch(e) {}
+}
+
+
+// ==========================================
+// 9. TAKVİM (ICS) VE ÇAKIŞMA MANTIĞI
+// ==========================================
+
+async function toggleJoin(eventId) {
+    if (!APP_STATE.currentUser) return;
+
+    const idx = APP_STATE.joinedEvents.indexOf(eventId);
+    let newlyAdded = false;
+    let incrementVal = 0;
+
+    if (idx > -1) {
+        APP_STATE.joinedEvents.splice(idx, 1);
+        incrementVal = -1;
+        showToast('Etkinlik kişisel takviminizden çıkarıldı.', 'info');
+    } else {
+        APP_STATE.joinedEvents.push(eventId);
+        incrementVal = 1;
+        newlyAdded = true;
+    }
+    
+    saveJoinedEvents(); // User Metadata ile Buluta kaydet!
+    updateJoinedBadge();
+
+    // Katılımcı sayısını veritabanında güncelle (Tablo yapısında kolon yoksa hata vermeden geçilir)
+    try {
+        const ev = APP_STATE.events.find(e => e.id === eventId);
+        if (ev && ev.participants_count !== undefined) {
+            const newCount = Math.max(0, ev.participants_count + incrementVal);
+            ev.participants_count = newCount; // Lokal UI için
+            await supabaseClient.from('events').update({ participants_count: newCount }).eq('id', eventId);
+        }
+    } catch(e) {}
+
+    if (newlyAdded) {
+        if (checkEventConflict(eventId)) {
+            showToast('Takvime eklendi, fakat başka bir etkinlikle saat çakışması var! ⚠️', 'warning');
+        } else {
+            showToast('Etkinlik kişisel takviminize eklendi!', 'success');
+        }
+    }
+
+    renderEvents();
+
+    if (currentModalEventId === eventId) {
+        openEventModal(eventId); // Arayüzü yenile
+    }
+}
+
+function checkEventConflict(targetEventId) {
+    if (!APP_STATE.joinedEvents.includes(targetEventId)) return false;
+    const targetEv = APP_STATE.events.find(e => e.id === targetEventId);
+    if (!targetEv) return false;
+
+    const targetParsed = parseEventData(targetEv);
+
+    for (const otherId of APP_STATE.joinedEvents) {
+        if (otherId === targetEventId) continue;
+        const otherEv = APP_STATE.events.find(e => e.id === otherId);
+        if (!otherEv) continue;
+
+        const otherParsed = parseEventData(otherEv);
+
+        // Artık gün sırasına göre değil, tam tarihe göre karşılaştırıyoruz
+        if (targetParsed.isoDateOnly === otherParsed.isoDateOnly) {
+            if (targetParsed.startVal < otherParsed.endVal && targetParsed.endVal > otherParsed.startVal) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function updateJoinedBadge() {
+    const badge = document.getElementById('joinedCountBadge');
+    if (badge) {
+        badge.innerText = APP_STATE.joinedEvents.length;
+    }
+}
+
+function loadJoinedEvents() {
+    if (!APP_STATE.currentUser) return;
+    
+    const metadata = APP_STATE.currentUser.user_metadata;
+    if (metadata && metadata.joinedEvents && Array.isArray(metadata.joinedEvents)) {
+        APP_STATE.joinedEvents = metadata.joinedEvents;
+        localStorage.setItem(`campulse_joined_${APP_STATE.currentUser.id}`, JSON.stringify(APP_STATE.joinedEvents));
+    } else {
+        const saved = localStorage.getItem(`campulse_joined_${APP_STATE.currentUser.id}`);
+        if (saved) {
+            try { 
+                APP_STATE.joinedEvents = JSON.parse(saved); 
+                saveJoinedEvents();
+            } catch (e) { 
+                APP_STATE.joinedEvents = []; 
+            }
+        } else {
+            APP_STATE.joinedEvents = [];
+        }
+    }
+    updateJoinedBadge();
+    // Buluttan yeni geldi, UI'yi yenile
+    if(document.getElementById('eventsContainer')) renderEvents();
+}
+
+async function saveJoinedEvents() {
+    if (!APP_STATE.currentUser) return;
+    
+    localStorage.setItem(`campulse_joined_${APP_STATE.currentUser.id}`, JSON.stringify(APP_STATE.joinedEvents));
+    
+    const { data, error } = await supabaseClient.auth.updateUser({
+        data: { joinedEvents: APP_STATE.joinedEvents }
+    });
+
+    if (!error && data?.user) {
+        APP_STATE.currentUser = data.user; 
+    } else {
+        console.error("Takvim bulut ile eşitlenirken bir hata oluştu:", error);
+    }
+}
+
+// ICS (Google / Apple Takvim) İndirme
+function downloadICS() {
+    if (!currentModalEventId) return;
+    const ev = APP_STATE.events.find(e => e.id === currentModalEventId);
+    if (!ev) return;
+    
+    const parsed = parseEventData(ev);
+    
+    // Tarih ve saat formatlama (YYYYMMDDTHHMMSSZ)
+    const eventDate = new Date(ev.date);
+    const startH = Math.floor(parsed.startVal);
+    const startM = Math.round((parsed.startVal % 1) * 60);
+    const endH = Math.floor(parsed.endVal);
+    const endM = Math.round((parsed.endVal % 1) * 60);
+    
+    const startDate = new Date(eventDate);
+    startDate.setHours(startH, startM, 0);
+    
+    const endDate = new Date(eventDate);
+    endDate.setHours(endH, endM, 0);
+
+    const formatICSDate = (date) => {
+        return date.toISOString().replace(/-|:|\.\d+/g, '');
+    };
+
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+SUMMARY:${ev.title}
+DTSTART:${formatICSDate(startDate)}
+DTEND:${formatICSDate(endDate)}
+LOCATION:${parsed.location}
+DESCRIPTION:${parsed.pureDesc}
+END:VEVENT
+END:VCALENDAR`;
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.setAttribute('download', `${ev.title.replace(/\s+/g, '_')}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showToast("Etkinlik takvime indirme işlemi başlatıldı.", "info");
+}
+
+
+// ==========================================
+// 10. YARDIMCI VE BİLDİRİM FONKSİYONLARI
+// ==========================================
+
+function showToast(msg, type = 'success') {
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toastMsg');
+    const toastIcon = document.getElementById('toastIcon');
+
+    toastMsg.innerText = msg;
+
+    if (type === 'error') {
+        toast.className = "fixed bottom-6 right-6 bg-red-600 text-white font-semibold text-sm px-4 py-3 rounded-xl shadow-[0_10px_40px_rgba(220,38,38,0.4)] transition-all duration-300 transform z-50 flex items-center space-x-2 max-w-sm";
+        toastIcon.className = "fa-solid fa-triangle-exclamation text-base";
+    } else if (type === 'warning') {
+        toast.className = "fixed bottom-6 right-6 bg-amber-600 text-white font-semibold text-sm px-4 py-3 rounded-xl shadow-[0_10px_40px_rgba(217,119,6,0.4)] transition-all duration-300 transform z-50 flex items-center space-x-2 max-w-sm";
+        toastIcon.className = "fa-solid fa-triangle-exclamation text-base";
+    } else if (type === 'info') {
+        toast.className = "fixed bottom-6 right-6 bg-slate-700 text-white font-semibold text-sm px-4 py-3 rounded-xl shadow-2xl transition-all duration-300 transform z-50 flex items-center space-x-2 max-w-sm";
+        toastIcon.className = "fa-solid fa-bell text-base text-cyan-400";
+    } else {
+        toast.className = "fixed bottom-6 right-6 bg-emerald-600 text-white font-semibold text-sm px-4 py-3 rounded-xl shadow-[0_10px_40px_rgba(5,150,105,0.4)] transition-all duration-300 transform z-50 flex items-center space-x-2 max-w-sm";
+        toastIcon.className = "fa-solid fa-circle-check text-base";
+    }
+
+    toast.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
+    
+    if (window.toastTimer) clearTimeout(window.toastTimer);
+    
+    window.toastTimer = setTimeout(() => {
+        toast.classList.add('translate-y-24', 'opacity-0', 'pointer-events-none');
+    }, 3500);
+}
+
+function showAuthMessage(msg, type) {
+    const box = document.getElementById('auth-message-box');
+    const text = document.getElementById('auth-message-text');
+    const icon = document.getElementById('auth-message-icon');
+    
+    box.classList.remove('hidden', 'bg-red-500/10', 'text-red-400', 'border-red-500/20', 'bg-green-500/10', 'text-emerald-400', 'border-green-500/20', 'bg-amber-500/10', 'text-amber-400', 'border-amber-500/20');
+    
+    if (type === 'error') {
+        box.classList.add('bg-red-500/10', 'text-red-400', 'border', 'border-red-500/20');
+        icon.className = 'fa-solid fa-circle-exclamation';
+    } else if (type === 'warning') {
+        box.classList.add('bg-amber-500/10', 'text-amber-400', 'border', 'border-amber-500/20');
+        icon.className = 'fa-solid fa-triangle-exclamation';
+    } else {
+        box.classList.add('bg-green-500/10', 'text-emerald-400', 'border', 'border-green-500/20');
+        icon.className = 'fa-solid fa-check-circle';
+    }
+    
+    text.innerText = msg;
+}
+
+function setAuthLoading(action, isLoading) {
+    const btnText = document.getElementById(`${action}-text`);
+    const loader = document.getElementById(`${action}-loader`);
+    const btn = document.getElementById(`${action}-btn`);
+    
+    if (isLoading) {
+        btnText.classList.add('hidden');
+        loader.classList.remove('hidden');
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+    } else {
+        btnText.classList.remove('hidden');
+        loader.classList.add('hidden');
+        btn.disabled = false;
+        btn.style.opacity = '1';
+    }
+}
+
+// Mevcut dataların kırılmaması için hem eski pipe formatını, hem de yeni DB kolonlarını destekler.
+function parseEventData(ev) {
+    let clubName = "Kampüs Etkinliği";
+    let location = "Belirtilmedi";
+    let timeStr = "Saat Belirtilmedi";
+    let pureDesc = ev.description || "Açıklama belirtilmedi.";
+    
+    if (ev.description && ev.description.includes('|')) {
+        const parts = ev.description.split('|');
+        if (parts.length >= 4) {
+            clubName = parts[0].trim();
+            location = parts[1].trim();
+            timeStr = parts[2].trim();
+            pureDesc = parts.slice(3).join('|').trim();
+        }
+    }
+
+    const evDate = new Date(ev.date);
+    const isoDateOnly = getLocalIsoDate(evDate); // YYYY-MM-DD
+    
+    const dayNames = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+    let dIndex = evDate.getDay() - 1;
+    if (dIndex < 0) dIndex = 6;
+    const formattedDate = `${evDate.getDate()} ${['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'][evDate.getMonth()]} ${dayNames[dIndex]}`;
+
+    let startVal = 0;
+    let endVal = 0;
+
+    if (timeStr.includes('-')) {
+        const times = timeStr.split('-');
+        if (times.length === 2) {
+            startVal = timeToVal(times[0].trim());
+            endVal = timeToVal(times[1].trim());
+        }
+    }
+
+    return { 
+        clubName, location, timeStr, pureDesc, 
+        isoDateOnly, formattedDate,
+        startVal, endVal,
+        imageUrl: ev.image_url || null,
+        participantsCount: ev.participants_count || 0
+    };
+}
+
+function timeToVal(timeStr) {
+    if (!timeStr) return 0;
+    const parts = timeStr.split(':');
+    if (parts.length < 2) return 0;
+    const h = Number(parts[0]) || 0;
+    const m = Number(parts[1]) || 0;
+    return h + (m / 60.0);
+}
+
+// UTC sorunu yaşamamak için lokasyona göre YYYY-MM-DD string döndürür
+function getLocalIsoDate(date) {
+    const offset = date.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(date - offset)).toISOString().split('T')[0];
+    return localISOTime;
+}
+
+function translateAuthError(msg) {
+    const lowerMsg = msg.toLowerCase();
+    if (lowerMsg.includes('invalid login credentials')) return "E-posta veya şifre hatalı.";
+    if (lowerMsg.includes('email not confirmed')) return "Lütfen e-posta adresinizi doğrulayın.";
+    if (lowerMsg.includes('user already registered')) return "Bu e-posta adresi zaten kayıtlı.";
+    if (lowerMsg.includes('password should be at least')) return "Şifreniz en az 6 karakter olmalıdır.";
+    return msg;
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+function openKvkkModal(e) {
+    if (e) e.preventDefault();
+    document.getElementById('kvkkModal').classList.remove('hidden');
+}
+
+function closeKvkkModal() {
+    document.getElementById('kvkkModal').classList.add('hidden');
+}

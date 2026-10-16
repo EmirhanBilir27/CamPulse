@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CamPulse - Kampüs Etkinlik & Kulüp Senkronizasyonu</title>
     
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -20,7 +21,11 @@
             }
         };
     </script>
+
+    <!-- Supabase JS Kütüphanesi -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- FontAwesome Icon Set -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
@@ -31,56 +36,180 @@
             background-color: #0b0f19 !important;
             color: #f1f5f9;
             -webkit-font-smoothing: antialiased;
-            overscroll-behavior-y: contain; 
+            overscroll-behavior-y: contain; /* Pull-to-refresh Android uyumu için */
         }
+
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
         body::before, body::after {
-            content: ""; position: fixed; border-radius: 50%; filter: blur(85px); pointer-events: none; z-index: -1; will-change: transform; opacity: 0.4;
+            content: "";
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(85px);
+            pointer-events: none;
+            z-index: -1;
+            will-change: transform;
+            opacity: 0.4;
         }
+
         body::before {
-            top: -150px; left: -100px; width: 520px; height: 520px; background: radial-gradient(circle, rgba(99, 102, 241, 0.45) 0%, rgba(6, 182, 212, 0) 70%); animation: floatOrbOne 14s ease-in-out infinite alternate;
+            top: -150px;
+            left: -100px;
+            width: 520px;
+            height: 520px;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.45) 0%, rgba(6, 182, 212, 0) 70%);
+            animation: floatOrbOne 14s ease-in-out infinite alternate;
         }
+
         body::after {
-            bottom: -150px; right: -100px; width: 580px; height: 580px; background: radial-gradient(circle, rgba(6, 182, 212, 0.4) 0%, rgba(129, 140, 248, 0) 70%); animation: floatOrbTwo 18s ease-in-out infinite alternate;
+            bottom: -150px;
+            right: -100px;
+            width: 580px;
+            height: 580px;
+            background: radial-gradient(circle, rgba(6, 182, 212, 0.4) 0%, rgba(129, 140, 248, 0) 70%);
+            animation: floatOrbTwo 18s ease-in-out infinite alternate;
         }
-        @keyframes floatOrbOne { 0% { transform: translate3d(0, 0, 0) scale(1); } 50% { transform: translate3d(80px, 60px, 0) scale(1.15); } 100% { transform: translate3d(-40px, 120px, 0) scale(0.95); } }
-        @keyframes floatOrbTwo { 0% { transform: translate3d(0, 0, 0) scale(1); } 50% { transform: translate3d(-90px, -70px, 0) scale(1.2); } 100% { transform: translate3d(50px, -110px, 0) scale(0.9); } }
+
+        @keyframes floatOrbOne {
+            0% { transform: translate3d(0, 0, 0) scale(1); }
+            50% { transform: translate3d(80px, 60px, 0) scale(1.15); }
+            100% { transform: translate3d(-40px, 120px, 0) scale(0.95); }
+        }
+
+        @keyframes floatOrbTwo {
+            0% { transform: translate3d(0, 0, 0) scale(1); }
+            50% { transform: translate3d(-90px, -70px, 0) scale(1.2); }
+            100% { transform: translate3d(50px, -110px, 0) scale(0.9); }
+        }
+
         ::-webkit-scrollbar { width: 7px; height: 7px; }
         ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.8); }
-        ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #6366f1, #06b6d4); border-radius: 99px; border: 2px solid rgba(15, 23, 42, 0.9); }
-        header { background: rgba(15, 23, 42, 0.75) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important; }
-        .logo-box { animation: logoPulse 3s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-        @keyframes logoPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7), 0 0 15px rgba(6, 182, 212, 0.3); } 50% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0), 0 0 22px rgba(6, 182, 212, 0.6); } }
-        input:focus, select:focus, textarea:focus { border-color: #38bdf8 !important; box-shadow: 0 0 20px rgba(56, 189, 248, 0.25), inset 0 0 10px rgba(99, 102, 241, 0.15) !important; outline: none; }
-        .event-card { position: relative; overflow: hidden; background: rgba(30, 41, 59, 0.65) !important; backdrop-filter: blur(12px) !important; border: 1px solid rgba(255, 255, 255, 0.07) !important; transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
-        .event-card::after { content: ""; position: absolute; top: 0; left: -150%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent); transform: skewX(-25deg); transition: left 0.75s ease; pointer-events: none; }
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #6366f1, #06b6d4);
+            border-radius: 99px;
+            border: 2px solid rgba(15, 23, 42, 0.9);
+        }
+
+        header {
+            background: rgba(15, 23, 42, 0.75) !important;
+            backdrop-filter: blur(16px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+        }
+
+        .logo-box {
+            animation: logoPulse 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        @keyframes logoPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7), 0 0 15px rgba(6, 182, 212, 0.3); }
+            50% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0), 0 0 22px rgba(6, 182, 212, 0.6); }
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: #38bdf8 !important;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.25), inset 0 0 10px rgba(99, 102, 241, 0.15) !important;
+            outline: none;
+        }
+
+        .event-card {
+            position: relative;
+            overflow: hidden;
+            background: rgba(30, 41, 59, 0.65) !important;
+            backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.07) !important;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .event-card::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -150%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+            transform: skewX(-25deg);
+            transition: left 0.75s ease;
+            pointer-events: none;
+        }
+
         .event-card:hover::after { left: 150%; }
-        .event-card:hover { transform: translate3d(0, -4px, 0); border-color: rgba(56, 189, 248, 0.45) !important; box-shadow: 0 16px 35px -10px rgba(15, 23, 42, 0.8), 0 0 20px rgba(99, 102, 241, 0.2); }
-        .conflict-card { border-color: rgba(239, 68, 68, 0.8) !important; animation: conflictGlow 1.8s ease-in-out infinite alternate; }
-        @keyframes conflictGlow { 0% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); } 100% { box-shadow: 0 0 22px rgba(239, 68, 68, 0.55); } }
-        .modal-content { background: rgba(15, 23, 42, 0.95) !important; backdrop-filter: blur(24px) saturate(200%) !important; border: 1px solid rgba(255, 255, 255, 0.12) !important; animation: modalSpring 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-        @keyframes modalSpring { 0% { opacity: 0; transform: translate3d(0, 25px, 0) scale(0.92); } 100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
-        .loader { border: 3px solid rgba(255, 255, 255, 0.1); border-radius: 50%; border-top: 3px solid #38bdf8; width: 24px; height: 24px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #ptr-indicator { position: absolute; top: -50px; left: 0; width: 100%; display: flex; justify-content: center; align-items: center; transition: transform 0.3s ease; z-index: 40; }
+        .event-card:hover {
+            transform: translate3d(0, -4px, 0);
+            border-color: rgba(56, 189, 248, 0.45) !important;
+            box-shadow: 0 16px 35px -10px rgba(15, 23, 42, 0.8), 0 0 20px rgba(99, 102, 241, 0.2);
+        }
+
+        .conflict-card {
+            border-color: rgba(239, 68, 68, 0.8) !important;
+            animation: conflictGlow 1.8s ease-in-out infinite alternate;
+        }
+
+        @keyframes conflictGlow {
+            0% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
+            100% { box-shadow: 0 0 22px rgba(239, 68, 68, 0.55); }
+        }
+
+        .modal-content {
+            background: rgba(15, 23, 42, 0.95) !important;
+            backdrop-filter: blur(24px) saturate(200%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            animation: modalSpring 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        @keyframes modalSpring {
+            0% { opacity: 0; transform: translate3d(0, 25px, 0) scale(0.92); }
+            100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        }
+
+        .loader {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top: 3px solid #38bdf8;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Pull to refresh indicator */
+        #ptr-indicator {
+            position: absolute;
+            top: -50px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.3s ease;
+            z-index: 40;
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-white relative">
 
+    <!-- ANDROID PULL TO REFRESH INDIKATÖRÜ -->
     <div id="ptr-indicator">
         <div class="bg-slate-800 shadow-lg rounded-full p-2 border border-slate-700">
             <i class="fa-solid fa-rotate text-cyan-400 text-lg" id="ptr-icon"></i>
         </div>
     </div>
 
-    <!-- AUTH SCREEN -->
+    <!-- GİRİŞ VE KAYIT EKRANI -->
     <div id="auth-screen" class="flex flex-col items-center justify-center min-h-screen p-4 z-50 absolute inset-0 bg-[#0b0f19]">
         <div class="mb-8 text-center">
             <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-tr from-indigo-500 to-cyan-500 shadow-[0_0_40px_rgba(56,189,248,0.4)] mb-4 mx-auto logo-box">
                 <i class="fa-solid fa-wave-square text-white text-4xl"></i>
             </div>
-            <h1 class="text-4xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-400 bg-clip-text text-transparent">CamPulse</h1>
+            <h1 class="text-4xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-400 bg-clip-text text-transparent">
+                CamPulse
+            </h1>
             <p class="text-slate-400 font-medium mt-2">Kampüs Etkinlik Ağına Katıl</p>
         </div>
         
@@ -88,14 +217,17 @@
             <div class="space-y-5">
                 <div>
                     <label class="block text-xs font-bold text-slate-400 mb-1.5 ml-1"><i class="fa-solid fa-envelope mr-1"></i> E-Posta Adresi</label>
-                    <input type="email" id="email-input" placeholder="ogrenci@gaziantep.edu.tr" class="w-full p-3.5 rounded-xl bg-slate-900/50 text-white border border-slate-700 focus:border-cyan-400 transition-all text-sm">
+                    <input type="email" id="email-input" placeholder="ogrenci@gaziantep.edu.tr" 
+                           class="w-full p-3.5 rounded-xl bg-slate-900/50 text-white border border-slate-700 focus:border-cyan-400 transition-all text-sm">
                 </div>
+                
                 <div>
                     <div class="flex justify-between items-center mb-1.5 ml-1 mr-1">
                         <label class="block text-xs font-bold text-slate-400"><i class="fa-solid fa-lock mr-1"></i> Şifre</label>
                         <button onclick="resetPassword()" class="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors font-semibold">Şifremi Unuttum?</button>
                     </div>
-                    <input type="password" id="password-input" placeholder="••••••••" class="w-full p-3.5 rounded-xl bg-slate-900/50 text-white border border-slate-700 focus:border-cyan-400 transition-all text-sm">
+                    <input type="password" id="password-input" placeholder="••••••••" 
+                           class="w-full p-3.5 rounded-xl bg-slate-900/50 text-white border border-slate-700 focus:border-cyan-400 transition-all text-sm">
                 </div>
                 
                 <div id="auth-message-box" class="hidden p-3 rounded-lg text-sm font-semibold flex items-center gap-2">
@@ -103,29 +235,33 @@
                     <span id="auth-message-text"></span>
                 </div>
 
+                <!-- KVKK Checkbox -->
                 <div class="flex items-start gap-2 pt-1 pb-1">
-                    <input type="checkbox" id="kvkk-checkbox" class="mt-0.5 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/50">
-                    <label for="kvkk-checkbox" class="text-[10px] text-slate-400 leading-tight">
-                        <a href="#" onclick="openKvkkModal(event)" class="text-cyan-400 hover:underline">KVKK Aydınlatma Metni</a>'ni ve Sözleşmeyi okudum, kabul ediyorum.
-                    </label>
-                </div>
+    <input type="checkbox" id="kvkk-checkbox" class="mt-0.5 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/50">
+    <label for="kvkk-checkbox" class="text-[10px] text-slate-400 leading-tight">
+        <a href="#" onclick="openKvkkModal(event)" class="text-cyan-400 hover:underline">KVKK Aydınlatma Metni</a>'ni ve Kullanıcı Sözleşmesi'ni okudum, kabul ediyorum.
+    </label>
+</div>
 
                 <div class="pt-2 space-y-3">
-                    <button onclick="login()" id="login-btn" class="relative w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-cyan-500/25 transition-all h-12">
+                    <button onclick="login()" id="login-btn" class="relative w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-cyan-500/25 transition-all overflow-hidden flex justify-center items-center h-12">
                         <span id="login-text">Sisteme Giriş Yap</span>
-                        <div id="login-loader" class="loader hidden mx-auto"></div>
+                        <div id="login-loader" class="loader hidden"></div>
                     </button>
-                    <button onclick="register()" id="register-btn" class="relative w-full bg-slate-700/50 hover:bg-slate-700 border border-slate-600 text-white font-bold py-3.5 rounded-xl transition-all h-12">
+                    
+                    <button onclick="register()" id="register-btn" class="relative w-full bg-slate-700/50 hover:bg-slate-700 border border-slate-600 text-white font-bold py-3.5 rounded-xl transition-all flex justify-center items-center h-12">
                         <span id="register-text">Yeni Hesap Oluştur</span>
-                        <div id="register-loader" class="loader hidden mx-auto"></div>
+                        <div id="register-loader" class="loader hidden"></div>
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- MAIN SCREEN -->
+    <!-- ANA UYGULAMA EKRANI -->
     <div id="main-screen" style="display: none;" class="w-full h-full flex flex-col flex-1">
+        
+        <!-- HEADER -->
         <header class="sticky top-0 z-30 px-4 py-3">
             <div class="max-w-4xl mx-auto flex items-center justify-between">
                 <div class="flex items-center space-x-3">
@@ -133,10 +269,13 @@
                         <i class="fa-solid fa-wave-square text-white text-lg"></i>
                     </div>
                     <div>
-                        <h1 class="text-xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-400 bg-clip-text text-transparent">Cam<span class="text-cyan-400">Pulse</span></h1>
+                        <h1 class="text-xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-400 bg-clip-text text-transparent">
+                            Cam<span class="text-cyan-400">Pulse</span>
+                        </h1>
                         <p id="user-email-display" class="text-[10px] text-slate-400 font-medium">Yükleniyor...</p>
                     </div>
                 </div>
+
                 <div class="flex items-center bg-slate-800/90 p-1.5 rounded-xl border border-slate-700/80">
                     <button onclick="logout()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-red-400 hover:text-white hover:bg-red-500/80 flex items-center gap-1.5">
                         <i class="fa-solid fa-arrow-right-from-bracket"></i> <span class="hidden sm:inline">Çıkış</span>
@@ -145,33 +284,47 @@
             </div>
         </header>
 
+        <!-- ANA İÇERİK -->
         <main class="max-w-4xl mx-auto w-full flex-1 px-4 py-6 space-y-5" id="main-content-area">
+
+            <!-- GEZİNTİ SEKMELERİ (Tüm Etkinlikler / Etkinliklerim) -->
             <div class="flex items-center bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 shadow-inner">
                 <button id="tab-all" onclick="setActiveTab('all')" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-md">
-                    <i class="fa-solid fa-calendar-days text-sm"></i> <span>Tüm Etkinlikler</span>
+                    <i class="fa-solid fa-calendar-days text-sm"></i>
+                    <span>Tüm Etkinlikler</span>
                 </button>
                 <button id="tab-my-events" onclick="setActiveTab('my-events')" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200">
-                    <i class="fa-solid fa-bookmark text-sm"></i> <span>Etkinliklerim</span>
+                    <i class="fa-solid fa-bookmark text-sm"></i>
+                    <span>Etkinliklerim</span>
                     <span id="joinedCountBadge" class="bg-indigo-500/30 text-indigo-300 text-[10px] px-2 py-0.5 rounded-full font-black border border-indigo-400/30">0</span>
                 </button>
             </div>
 
+            <!-- ARAMA BARI -->
             <div class="relative">
                 <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-400"></i>
-                <input type="text" id="searchInput" oninput="renderEvents()" placeholder="Etkinlik adı, kulüp veya açıklama içinde ara..." class="w-full bg-slate-800/80 border border-slate-700/80 rounded-2xl pl-11 pr-4 py-3 text-sm focus:outline-none transition-all placeholder:text-slate-500 text-slate-100">
+                <input type="text" id="searchInput" oninput="renderEvents()" placeholder="Etkinlik adı, kulüp veya açıklama içinde ara..." 
+                    class="w-full bg-slate-800/80 border border-slate-700/80 rounded-2xl pl-11 pr-4 py-3 text-sm focus:outline-none transition-all placeholder:text-slate-500 text-slate-100">
             </div>
 
+            <!-- YILLIK DİNAMİK GÜN ŞERİDİ -->
             <div id="daysListContainer" class="flex items-center space-x-2">
-                <button onclick="shiftCalendar(-7)" class="shrink-0 w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                <button onclick="shiftCalendar(-7)" class="shrink-0 w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center">
+                    <i class="fa-solid fa-chevron-left text-xs"></i>
+                </button>
                 <div class="flex space-x-2 overflow-x-auto no-scrollbar pb-1 flex-1" id="daysList"></div>
-                <button onclick="shiftCalendar(7)" class="shrink-0 w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+                <button onclick="shiftCalendar(7)" class="shrink-0 w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center">
+                    <i class="fa-solid fa-chevron-right text-xs"></i>
+                </button>
             </div>
 
             <!-- YÖNETİCİ FORMU -->
             <div id="admin-panel" style="display: none;" class="bg-indigo-950/40 border border-indigo-500/30 rounded-3xl p-5 shadow-xl backdrop-blur-md">
                 <div class="flex items-center justify-between mb-4 pb-4 border-b border-indigo-500/20">
                     <div class="flex items-center gap-3">
-                        <div class="p-2.5 bg-indigo-600/30 text-indigo-400 rounded-xl"><i class="fa-solid fa-shield-halved text-xl"></i></div>
+                        <div class="p-2.5 bg-indigo-600/30 text-indigo-400 rounded-xl">
+                            <i class="fa-solid fa-shield-halved text-xl"></i>
+                        </div>
                         <div>
                             <h3 class="text-sm font-bold text-indigo-300">Yönetici Yetkisi Aktif</h3>
                             <p class="text-xs text-indigo-400/60">Veritabanına yeni etkinlik yayınlayabilirsiniz.</p>
@@ -182,7 +335,7 @@
                     </button>
                 </div>
                 
-                <form id="quickAddForm" style="display: none;" class="space-y-3 pt-2">
+                <form id="quickAddForm" onsubmit="handleAddEvent(event)" style="display: none;" class="space-y-3 pt-2">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <input type="text" id="addTitle" required placeholder="Etkinlik Adı (Zorunlu)" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
                         <input type="text" id="addClub" required placeholder="Kulüp Adı" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
@@ -195,6 +348,7 @@
                     </div>
                     <textarea id="addDesc" rows="3" placeholder="Etkinlik detaylı açıklaması..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"></textarea>
                     
+                    <!-- Afiş Ekleme Alanı -->
                     <div class="flex items-center gap-3 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white">
                         <i class="fa-regular fa-image text-slate-400"></i>
                         <input type="file" id="addPoster" accept="image/*" class="w-full text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/20 file:text-indigo-400 hover:file:bg-indigo-500/30 transition-all cursor-pointer">
@@ -209,49 +363,59 @@
                 </form>
             </div>
 
+            <!-- YÜKLENİYOR İNDİKATÖRÜ -->
             <div id="loading-indicator" class="flex flex-col items-center justify-center py-12 space-y-4">
                 <div class="loader !w-10 !h-10 border-[4px]"></div>
                 <p class="text-slate-400 font-medium animate-pulse">Etkinlikler Senkronize Ediliyor...</p>
             </div>
 
+            <!-- ETKİNLİK LİSTESİ -->
             <div class="space-y-4" id="eventsContainer"></div>
         </main>
     </div>
 
-    <!-- MODAL -->
+    <!-- ETKİNLİK DETAY MODAL PENCERESİ -->
     <div id="eventDetailModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
         <div class="modal-content w-full max-w-lg rounded-3xl p-6 shadow-2xl relative space-y-5 max-h-[90vh] flex flex-col overflow-hidden">
-            <button onclick="closeEventModal()" class="absolute top-5 right-5 w-9 h-9 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center border border-slate-700 z-10"><i class="fa-solid fa-xmark text-base"></i></button>
+            <!-- Modal Kapatma Butonu -->
+            <button onclick="closeEventModal()" class="absolute top-5 right-5 w-9 h-9 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center border border-slate-700 z-10">
+                <i class="fa-solid fa-xmark text-base"></i>
+            </button>
 
+            <!-- İçerik Alanı -->
             <div class="flex-1 overflow-y-auto no-scrollbar pr-1 space-y-5 relative">
+                <!-- Afiş -->
                 <div id="modalPosterContainer" class="w-full h-48 rounded-2xl bg-slate-800/50 border border-slate-700/50 overflow-hidden hidden relative">
                     <img id="modalPoster" src="" alt="Etkinlik Afişi" class="w-full h-full object-cover">
                     <div class="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-transparent to-transparent"></div>
                 </div>
 
+                <!-- Başlık ve Rozetler -->
                 <div class="pr-8 space-y-2 relative z-10" id="modalHeaderSection">
                     <div class="flex items-center gap-2 flex-wrap" id="modalBadges"></div>
                     <h2 id="modalTitle" class="text-xl font-black text-white leading-snug">Etkinlik Başlığı</h2>
                     <p id="modalParticipantsCount" class="text-xs font-semibold text-emerald-400 mt-1 hidden"><i class="fa-solid fa-users mr-1"></i> <span id="pCountText"></span> kişi katılıyor</p>
                 </div>
 
+                <!-- Bilgi Satırı -->
                 <div class="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 text-xs relative z-10">
                     <div class="flex items-center gap-2 text-slate-300">
                         <i class="fa-regular fa-clock text-cyan-400 text-sm"></i>
                         <div>
                             <p class="text-[10px] text-slate-500 uppercase font-bold">Zaman</p>
-                            <p id="modalTime" class="font-semibold"></p>
+                            <p id="modalTime" class="font-semibold">Pazartesi | 12:00-14:00</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2 text-slate-300">
                         <i class="fa-solid fa-location-dot text-indigo-400 text-sm"></i>
                         <div>
                             <p class="text-[10px] text-slate-500 uppercase font-bold">Konum</p>
-                            <p id="modalLocation" class="font-semibold"></p>
+                            <p id="modalLocation" class="font-semibold">Mühendislik Amfisi</p>
                         </div>
                     </div>
                 </div>
 
+                <!-- Çakışma Uyarı Kutusu -->
                 <div id="modalConflictAlert" class="hidden p-3.5 rounded-2xl bg-red-950/40 border border-red-500/40 flex items-start gap-3">
                     <i class="fa-solid fa-triangle-exclamation text-red-400 text-lg shrink-0 mt-0.5"></i>
                     <div>
@@ -260,17 +424,22 @@
                     </div>
                 </div>
 
+                <!-- Rating Alanı (Geçmiş etkinlikler için) -->
                 <div id="modalRatingSection" class="hidden p-4 rounded-2xl bg-slate-800/40 border border-slate-700/50 flex flex-col items-center justify-center space-y-2">
                     <p class="text-xs font-bold text-slate-300">Bu etkinlik nasıldı? Puanla!</p>
-                    <div class="flex items-center gap-1.5 text-2xl" id="starContainer"></div>
+                    <div class="flex items-center gap-1.5 text-2xl" id="starContainer">
+                        <!-- Yıldızlar app.js tarafından doldurulacak -->
+                    </div>
                 </div>
 
+                <!-- Tam Açıklama Metni -->
                 <div class="space-y-1.5 border-t border-slate-800/80 pt-4">
                     <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Etkinlik Detayları & Açıklama</h4>
                     <p id="modalDescription" class="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap"></p>
                 </div>
             </div>
 
+            <!-- Alt Butonlar -->
             <div class="pt-4 flex items-center justify-between border-t border-slate-800 shrink-0">
                 <button onclick="downloadICS()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-slate-800 border border-slate-700 hover:border-cyan-500/50 transition-all flex items-center gap-2">
                     <i class="fa-regular fa-calendar-plus text-cyan-400"></i> Takvime Aktar
@@ -280,26 +449,33 @@
         </div>
     </div>
 
-    <!-- TOAST -->
+    <!-- TOAST BİLDİRİM SİSTEMİ -->
     <div id="toast" class="fixed bottom-6 right-6 bg-emerald-600 text-white font-semibold text-sm px-4 py-3 rounded-xl shadow-2xl transition-all duration-300 transform translate-y-24 opacity-0 pointer-events-none z-50 flex items-center space-x-2 max-w-sm">
         <i id="toastIcon" class="fa-solid fa-circle-check text-base"></i>
         <span id="toastMsg" class="leading-tight">İşlem başarılı!</span>
     </div>
 
-    <script src="app.js?v=2"></script>
-    
-    <!-- KVKK MODAL -->
-    <div id="kvkkModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-        <div class="modal-content w-full max-w-lg rounded-3xl p-6 shadow-2xl relative space-y-4 max-h-[80vh] flex flex-col">
-            <button onclick="closeKvkkModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-slate-700"><i class="fa-solid fa-xmark"></i></button>
-            <h3 class="text-lg font-bold text-white flex items-center gap-2"><i class="fa-solid fa-shield-halved text-cyan-400"></i> KVKK ve Sözleşme</h3>
-            <div class="flex-1 overflow-y-auto text-xs text-slate-300 leading-relaxed space-y-3 pr-2 border-t border-b border-slate-800 py-3">
-                <p><strong>1. Veri Sorumlusu:</strong> CamPulse platformu olarak kişisel verilerinizin güvenliğine önem veriyoruz.</p>
-                <p><strong>2. İşlenen Veriler:</strong> Kayıt aşamasında sağladığınız e-posta adresi veritabanımızda saklanır.</p>
-                <p><strong>3. Veri Güvenliği:</strong> Verileriniz Supabase altyapısında şifreleme ile korunmaktadır.</p>
-            </div>
-            <button onclick="closeKvkkModal()" class="w-full bg-cyan-500 hover:bg-cyan-400 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Okudum, Anladım</button>
+    <!-- Uygulama Mantık Dosyası -->
+    <script src="app.js"></script>
+    <!-- KVKK METNİ POPUP MODAL -->
+<div id="kvkkModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="modal-content w-full max-w-lg rounded-3xl p-6 shadow-2xl relative space-y-4 max-h-[80vh] flex flex-col">
+        <button onclick="closeKvkkModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-slate-700">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-shield-halved text-cyan-400"></i> KVKK ve Kullanıcı Sözleşmesi
+        </h3>
+        <div class="flex-1 overflow-y-auto text-xs text-slate-300 leading-relaxed space-y-3 pr-2 border-t border-b border-slate-800 py-3">
+            <p><strong>1. Veri Sorumlusu:</strong> CamPulse platformu olarak kişisel verilerinizin güvenliğine önem veriyoruz.</p>
+            <p><strong>2. İşlenen Veriler:</strong> Kayıt aşamasında sağladığınız e-posta adresi ve katıldığınız etkinlik tercihleri veritabanımızda güvenle saklanır.</p>
+            <p><strong>3. Veri İşleme Amacı:</strong> Kişisel verileriniz yalnızca etkinlik senkronizasyonu, takvim çakışma uyarıları ve platform içi üyelik doğrulamaları amacıyla kullanılır.</p>
+            <p><strong>4. Veri Güvenliği:</strong> Verileriniz Supabase altyapısında 256-bit şifreleme ile korunmakta olup, üçüncü taraflarla paylaşılmamaktadır.</p>
         </div>
+        <button onclick="closeKvkkModal()" class="w-full bg-cyan-500 hover:bg-cyan-400 text-white font-bold py-2.5 rounded-xl text-xs transition-all">
+            Okudum, Anladım
+        </button>
     </div>
+</div>
 </body>
 </html>
