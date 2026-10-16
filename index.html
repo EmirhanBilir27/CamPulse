@@ -36,6 +36,7 @@
             background-color: #0b0f19 !important;
             color: #f1f5f9;
             -webkit-font-smoothing: antialiased;
+            overscroll-behavior-y: contain; /* Pull-to-refresh Android uyumu için */
         }
 
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -176,9 +177,29 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Pull to refresh indicator */
+        #ptr-indicator {
+            position: absolute;
+            top: -50px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.3s ease;
+            z-index: 40;
+        }
     </style>
 </head>
-<body class="min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-white">
+<body class="min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-white relative">
+
+    <!-- ANDROID PULL TO REFRESH INDIKATÖRÜ -->
+    <div id="ptr-indicator">
+        <div class="bg-slate-800 shadow-lg rounded-full p-2 border border-slate-700">
+            <i class="fa-solid fa-rotate text-cyan-400 text-lg" id="ptr-icon"></i>
+        </div>
+    </div>
 
     <!-- GİRİŞ VE KAYIT EKRANI -->
     <div id="auth-screen" class="flex flex-col items-center justify-center min-h-screen p-4 z-50 absolute inset-0 bg-[#0b0f19]">
@@ -201,7 +222,10 @@
                 </div>
                 
                 <div>
-                    <label class="block text-xs font-bold text-slate-400 mb-1.5 ml-1"><i class="fa-solid fa-lock mr-1"></i> Şifre</label>
+                    <div class="flex justify-between items-center mb-1.5 ml-1 mr-1">
+                        <label class="block text-xs font-bold text-slate-400"><i class="fa-solid fa-lock mr-1"></i> Şifre</label>
+                        <button onclick="resetPassword()" class="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors font-semibold">Şifremi Unuttum?</button>
+                    </div>
                     <input type="password" id="password-input" placeholder="••••••••" 
                            class="w-full p-3.5 rounded-xl bg-slate-900/50 text-white border border-slate-700 focus:border-cyan-400 transition-all text-sm">
                 </div>
@@ -210,6 +234,14 @@
                     <i id="auth-message-icon" class="fa-solid"></i>
                     <span id="auth-message-text"></span>
                 </div>
+
+                <!-- KVKK Checkbox -->
+                <div class="flex items-start gap-2 pt-1 pb-1">
+    <input type="checkbox" id="kvkk-checkbox" class="mt-0.5 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/50">
+    <label for="kvkk-checkbox" class="text-[10px] text-slate-400 leading-tight">
+        <a href="#" onclick="openKvkkModal(event)" class="text-cyan-400 hover:underline">KVKK Aydınlatma Metni</a>'ni ve Kullanıcı Sözleşmesi'ni okudum, kabul ediyorum.
+    </label>
+</div>
 
                 <div class="pt-2 space-y-3">
                     <button onclick="login()" id="login-btn" class="relative w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-cyan-500/25 transition-all overflow-hidden flex justify-center items-center h-12">
@@ -253,7 +285,7 @@
         </header>
 
         <!-- ANA İÇERİK -->
-        <main class="max-w-4xl mx-auto w-full flex-1 px-4 py-6 space-y-5">
+        <main class="max-w-4xl mx-auto w-full flex-1 px-4 py-6 space-y-5" id="main-content-area">
 
             <!-- GEZİNTİ SEKMELERİ (Tüm Etkinlikler / Etkinliklerim) -->
             <div class="flex items-center bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 shadow-inner">
@@ -275,9 +307,15 @@
                     class="w-full bg-slate-800/80 border border-slate-700/80 rounded-2xl pl-11 pr-4 py-3 text-sm focus:outline-none transition-all placeholder:text-slate-500 text-slate-100">
             </div>
 
-            <!-- HAFTALIK GÜN ŞERİDİ -->
-            <div id="daysListContainer" class="flex space-x-2 overflow-x-auto no-scrollbar pb-1">
-                <div class="flex space-x-2 w-full" id="daysList"></div>
+            <!-- YILLIK DİNAMİK GÜN ŞERİDİ -->
+            <div id="daysListContainer" class="flex items-center space-x-2">
+                <button onclick="shiftCalendar(-7)" class="shrink-0 w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center">
+                    <i class="fa-solid fa-chevron-left text-xs"></i>
+                </button>
+                <div class="flex space-x-2 overflow-x-auto no-scrollbar pb-1 flex-1" id="daysList"></div>
+                <button onclick="shiftCalendar(7)" class="shrink-0 w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center">
+                    <i class="fa-solid fa-chevron-right text-xs"></i>
+                </button>
             </div>
 
             <!-- YÖNETİCİ FORMU -->
@@ -304,14 +342,18 @@
                     </div>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <input type="text" id="addLocation" required placeholder="Konum" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
-                        <select id="addDayIndex" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
-                            <option value="1">Pazartesi</option><option value="2">Salı</option><option value="3">Çarşamba</option><option value="4">Perşembe</option><option value="5">Cuma</option><option value="6">Cumartesi</option><option value="7">Pazar</option>
-                        </select>
+                        <input type="date" id="addDate" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 text-center">
                         <input type="time" id="addStartTime" required value="12:00" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 text-center">
                         <input type="time" id="addEndTime" required value="14:00" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 text-center">
                     </div>
                     <textarea id="addDesc" rows="3" placeholder="Etkinlik detaylı açıklaması..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"></textarea>
                     
+                    <!-- Afiş Ekleme Alanı -->
+                    <div class="flex items-center gap-3 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white">
+                        <i class="fa-regular fa-image text-slate-400"></i>
+                        <input type="file" id="addPoster" accept="image/*" class="w-full text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/20 file:text-indigo-400 hover:file:bg-indigo-500/30 transition-all cursor-pointer">
+                    </div>
+
                     <div class="flex justify-end gap-2 pt-2">
                         <button type="button" onclick="toggleAdminForm()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 border border-slate-700">İptal</button>
                         <button type="submit" id="submit-event-btn" class="px-6 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg flex items-center gap-2">
@@ -334,54 +376,74 @@
 
     <!-- ETKİNLİK DETAY MODAL PENCERESİ -->
     <div id="eventDetailModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-        <div class="modal-content w-full max-w-lg rounded-3xl p-6 shadow-2xl relative space-y-5 max-h-[90vh] flex flex-col">
+        <div class="modal-content w-full max-w-lg rounded-3xl p-6 shadow-2xl relative space-y-5 max-h-[90vh] flex flex-col overflow-hidden">
             <!-- Modal Kapatma Butonu -->
-            <button onclick="closeEventModal()" class="absolute top-5 right-5 w-9 h-9 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center border border-slate-700">
+            <button onclick="closeEventModal()" class="absolute top-5 right-5 w-9 h-9 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex items-center justify-center border border-slate-700 z-10">
                 <i class="fa-solid fa-xmark text-base"></i>
             </button>
 
-            <!-- Başlık ve Rozetler -->
-            <div class="pr-8 space-y-2">
-                <div class="flex items-center gap-2 flex-wrap" id="modalBadges"></div>
-                <h2 id="modalTitle" class="text-xl font-black text-white leading-snug">Etkinlik Başlığı</h2>
-            </div>
+            <!-- İçerik Alanı -->
+            <div class="flex-1 overflow-y-auto no-scrollbar pr-1 space-y-5 relative">
+                <!-- Afiş -->
+                <div id="modalPosterContainer" class="w-full h-48 rounded-2xl bg-slate-800/50 border border-slate-700/50 overflow-hidden hidden relative">
+                    <img id="modalPoster" src="" alt="Etkinlik Afişi" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-transparent to-transparent"></div>
+                </div>
 
-            <!-- Bilgi Satırı -->
-            <div class="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 text-xs">
-                <div class="flex items-center gap-2 text-slate-300">
-                    <i class="fa-regular fa-clock text-cyan-400 text-sm"></i>
-                    <div>
-                        <p class="text-[10px] text-slate-500 uppercase font-bold">Zaman</p>
-                        <p id="modalTime" class="font-semibold">Pazartesi | 12:00-14:00</p>
+                <!-- Başlık ve Rozetler -->
+                <div class="pr-8 space-y-2 relative z-10" id="modalHeaderSection">
+                    <div class="flex items-center gap-2 flex-wrap" id="modalBadges"></div>
+                    <h2 id="modalTitle" class="text-xl font-black text-white leading-snug">Etkinlik Başlığı</h2>
+                    <p id="modalParticipantsCount" class="text-xs font-semibold text-emerald-400 mt-1 hidden"><i class="fa-solid fa-users mr-1"></i> <span id="pCountText"></span> kişi katılıyor</p>
+                </div>
+
+                <!-- Bilgi Satırı -->
+                <div class="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 text-xs relative z-10">
+                    <div class="flex items-center gap-2 text-slate-300">
+                        <i class="fa-regular fa-clock text-cyan-400 text-sm"></i>
+                        <div>
+                            <p class="text-[10px] text-slate-500 uppercase font-bold">Zaman</p>
+                            <p id="modalTime" class="font-semibold">Pazartesi | 12:00-14:00</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-slate-300">
+                        <i class="fa-solid fa-location-dot text-indigo-400 text-sm"></i>
+                        <div>
+                            <p class="text-[10px] text-slate-500 uppercase font-bold">Konum</p>
+                            <p id="modalLocation" class="font-semibold">Mühendislik Amfisi</p>
+                        </div>
                     </div>
                 </div>
-                <div class="flex items-center gap-2 text-slate-300">
-                    <i class="fa-solid fa-location-dot text-indigo-400 text-sm"></i>
+
+                <!-- Çakışma Uyarı Kutusu -->
+                <div id="modalConflictAlert" class="hidden p-3.5 rounded-2xl bg-red-950/40 border border-red-500/40 flex items-start gap-3">
+                    <i class="fa-solid fa-triangle-exclamation text-red-400 text-lg shrink-0 mt-0.5"></i>
                     <div>
-                        <p class="text-[10px] text-slate-500 uppercase font-bold">Konum</p>
-                        <p id="modalLocation" class="font-semibold">Mühendislik Amfisi</p>
+                        <p class="text-xs font-bold text-red-300">Saat Çakışması Uyarısı</p>
+                        <p class="text-[11px] text-red-400/80 mt-0.5">Takviminize eklediğiniz başka bir etkinlik ile aynı saat aralığına denk geliyor.</p>
                     </div>
                 </div>
-            </div>
 
-            <!-- Çakışma Uyarı Kutusu (Açılırsa Gösterilir) -->
-            <div id="modalConflictAlert" class="hidden p-3.5 rounded-2xl bg-red-950/40 border border-red-500/40 flex items-start gap-3">
-                <i class="fa-solid fa-triangle-exclamation text-red-400 text-lg shrink-0 mt-0.5"></i>
-                <div>
-                    <p class="text-xs font-bold text-red-300">Saat Çakışması Uyarısı</p>
-                    <p class="text-[11px] text-red-400/80 mt-0.5">Takviminize eklediğiniz başka bir etkinlik ile aynı saat aralığına denk geliyor.</p>
+                <!-- Rating Alanı (Geçmiş etkinlikler için) -->
+                <div id="modalRatingSection" class="hidden p-4 rounded-2xl bg-slate-800/40 border border-slate-700/50 flex flex-col items-center justify-center space-y-2">
+                    <p class="text-xs font-bold text-slate-300">Bu etkinlik nasıldı? Puanla!</p>
+                    <div class="flex items-center gap-1.5 text-2xl" id="starContainer">
+                        <!-- Yıldızlar app.js tarafından doldurulacak -->
+                    </div>
                 </div>
-            </div>
 
-            <!-- Tam Açıklama Metni (Scroll Olabilir) -->
-            <div class="flex-1 overflow-y-auto pr-1 space-y-1.5 border-t border-slate-800/80 pt-3">
-                <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Etkinlik Detayları & Açıklama</h4>
-                <p id="modalDescription" class="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap"></p>
+                <!-- Tam Açıklama Metni -->
+                <div class="space-y-1.5 border-t border-slate-800/80 pt-4">
+                    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Etkinlik Detayları & Açıklama</h4>
+                    <p id="modalDescription" class="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap"></p>
+                </div>
             </div>
 
             <!-- Alt Butonlar -->
-            <div class="pt-2 flex items-center justify-between border-t border-slate-800">
-                <button onclick="closeEventModal()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 border border-slate-700">Kapat</button>
+            <div class="pt-4 flex items-center justify-between border-t border-slate-800 shrink-0">
+                <button onclick="downloadICS()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-slate-800 border border-slate-700 hover:border-cyan-500/50 transition-all flex items-center gap-2">
+                    <i class="fa-regular fa-calendar-plus text-cyan-400"></i> Takvime Aktar
+                </button>
                 <div id="modalActionContainer"></div>
             </div>
         </div>
@@ -395,5 +457,25 @@
 
     <!-- Uygulama Mantık Dosyası -->
     <script src="app.js"></script>
+    <!-- KVKK METNİ POPUP MODAL -->
+<div id="kvkkModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="modal-content w-full max-w-lg rounded-3xl p-6 shadow-2xl relative space-y-4 max-h-[80vh] flex flex-col">
+        <button onclick="closeKvkkModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-slate-700">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-shield-halved text-cyan-400"></i> KVKK ve Kullanıcı Sözleşmesi
+        </h3>
+        <div class="flex-1 overflow-y-auto text-xs text-slate-300 leading-relaxed space-y-3 pr-2 border-t border-b border-slate-800 py-3">
+            <p><strong>1. Veri Sorumlusu:</strong> CamPulse platformu olarak kişisel verilerinizin güvenliğine önem veriyoruz.</p>
+            <p><strong>2. İşlenen Veriler:</strong> Kayıt aşamasında sağladığınız e-posta adresi ve katıldığınız etkinlik tercihleri veritabanımızda güvenle saklanır.</p>
+            <p><strong>3. Veri İşleme Amacı:</strong> Kişisel verileriniz yalnızca etkinlik senkronizasyonu, takvim çakışma uyarıları ve platform içi üyelik doğrulamaları amacıyla kullanılır.</p>
+            <p><strong>4. Veri Güvenliği:</strong> Verileriniz Supabase altyapısında 256-bit şifreleme ile korunmakta olup, üçüncü taraflarla paylaşılmamaktadır.</p>
+        </div>
+        <button onclick="closeKvkkModal()" class="w-full bg-cyan-500 hover:bg-cyan-400 text-white font-bold py-2.5 rounded-xl text-xs transition-all">
+            Okudum, Anladım
+        </button>
+    </div>
+</div>
 </body>
 </html>
