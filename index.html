@@ -237,11 +237,11 @@
 
                 <!-- KVKK Checkbox -->
                 <div class="flex items-start gap-2 pt-1 pb-1">
-    <input type="checkbox" id="kvkk-checkbox" class="mt-0.5 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/50">
-    <label for="kvkk-checkbox" class="text-[10px] text-slate-400 leading-tight">
-        <a href="#" onclick="openKvkkModal(event)" class="text-cyan-400 hover:underline">KVKK Aydınlatma Metni</a>'ni ve Kullanıcı Sözleşmesi'ni okudum, kabul ediyorum.
-    </label>
-</div>
+                    <input type="checkbox" id="kvkk-checkbox" class="mt-0.5 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/50">
+                    <label for="kvkk-checkbox" class="text-[10px] text-slate-400 leading-tight">
+                        <a href="#" class="text-cyan-400 hover:underline">KVKK Aydınlatma Metni</a>'ni ve Kullanıcı Sözleşmesi'ni okudum, kabul ediyorum.
+                    </label>
+                </div>
 
                 <div class="pt-2 space-y-3">
                     <button onclick="login()" id="login-btn" class="relative w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-cyan-500/25 transition-all overflow-hidden flex justify-center items-center h-12">
@@ -457,25 +457,5 @@
 
     <!-- Uygulama Mantık Dosyası -->
     <script src="app.js"></script>
-    <!-- KVKK METNİ POPUP MODAL -->
-<div id="kvkkModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-    <div class="modal-content w-full max-w-lg rounded-3xl p-6 shadow-2xl relative space-y-4 max-h-[80vh] flex flex-col">
-        <button onclick="closeKvkkModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-slate-700">
-            <i class="fa-solid fa-xmark"></i>
-        </button>
-        <h3 class="text-lg font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-shield-halved text-cyan-400"></i> KVKK ve Kullanıcı Sözleşmesi
-        </h3>
-        <div class="flex-1 overflow-y-auto text-xs text-slate-300 leading-relaxed space-y-3 pr-2 border-t border-b border-slate-800 py-3">
-            <p><strong>1. Veri Sorumlusu:</strong> CamPulse platformu olarak kişisel verilerinizin güvenliğine önem veriyoruz.</p>
-            <p><strong>2. İşlenen Veriler:</strong> Kayıt aşamasında sağladığınız e-posta adresi ve katıldığınız etkinlik tercihleri veritabanımızda güvenle saklanır.</p>
-            <p><strong>3. Veri İşleme Amacı:</strong> Kişisel verileriniz yalnızca etkinlik senkronizasyonu, takvim çakışma uyarıları ve platform içi üyelik doğrulamaları amacıyla kullanılır.</p>
-            <p><strong>4. Veri Güvenliği:</strong> Verileriniz Supabase altyapısında 256-bit şifreleme ile korunmakta olup, üçüncü taraflarla paylaşılmamaktadır.</p>
-        </div>
-        <button onclick="closeKvkkModal()" class="w-full bg-cyan-500 hover:bg-cyan-400 text-white font-bold py-2.5 rounded-xl text-xs transition-all">
-            Okudum, Anladım
-        </button>
-    </div>
-</div>
 </body>
 </html>

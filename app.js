@@ -292,23 +292,135 @@ async function fetchEvents() {
     }
 
     APP_STATE.events = events || [];
-
-    // GÜNCELLEME (BUG FİX): Veritabanından silinmiş ama kullanıcının hesabında kalmış "hayalet" etkinlikleri temizle
-    if (APP_STATE.joinedEvents.length > 0) {
-        const validJoinedEvents = APP_STATE.joinedEvents.filter(eventId => 
-            APP_STATE.events.some(ev => ev.id === eventId)
-        );
-        
-        // Hayalet etkinlikler tespit edilirse listeyi temizle ve buluta (Supabase) senkronize et
-        if (validJoinedEvents.length !== APP_STATE.joinedEvents.length) {
-            APP_STATE.joinedEvents = validJoinedEvents;
-            saveJoinedEvents();
-        }
-    }
-
     updateJoinedBadge();
     renderEvents();
 }
+
+async function handleAddEvent(e) {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submit-event-btn');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Yükleniyor...';
+    submitBtn.disabled = true;
+
+    const title = document.getElementById('addTitle').value.trim();
+    const club = document.getElementById('addClub').value.trim();
+    const location = document.getElementById('addLocation').value.trim();
+    const dateStr = document.getElementById('addDate').value;
+    const startStr = document.getElementById('addStartTime').value;
+    const endStr = document.getElementById('addEndTime').value;
+    const description = document.getElementById('addDesc').value.trim() || 'Açıklama girilmemiş.';
+    const fileInput = document.getElementById('addPoster');
+    
+    const startVal = timeToVal(startStr);
+    const endVal = timeToVal(endStr);
+
+    if (endVal <= startVal) {
+        showToast('Hata: Bitiş saati başlangıç saatinden önce olamaz.', 'error');
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+        return;
+    }
+
+    let uploadedImageUrl = null;
+
+    // Afiş Storage Yükleme
+    if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        
+        // Hata yakalama: Eğer "event-posters" adında bir storage bucket'i yoksa kod çökmez, resimsiz ekler.
+        try {
+            const { data: uploadData, error: uploadError } = await supabaseClient.storage
+                .from('event-posters')
+                .upload(fileName, file);
+                
+            if (!uploadError && uploadData) {
+                const { data: { publicUrl } } = supabaseClient.storage.from('event-posters').getPublicUrl(fileName);
+                uploadedImageUrl = publicUrl;
+            } else {
+                console.warn("Afiş yüklenemedi (Bucket oluşturulmamış olabilir).", uploadError);
+            }
+        } catch(err) {
+            console.warn("Storage ayarları eksik.", err);
+        }
+    }
+
+    // Hem eski pipe-formatı desteklemek için desciption birleştiriyoruz, hem de yeni kolonlara hazırlık yapıyoruz.
+    const fullDesc = `${club} | ${location} | ${startStr}-${endStr} | ${description}`;
+    const isoDate = new Date(dateStr).toISOString();
+
+    const eventPayload = { 
+        title: title, 
+        description: fullDesc,
+        date: isoDate
+    };
+
+    // Eğer Supabase'de image_url kolonu varsa onu doldurur (Yoksa hata fırlatmaz, sessizce yok sayar)
+    if (uploadedImageUrl) {
+        eventPayload.image_url = uploadedImageUrl;
+    }
+    eventPayload.participants_count = 0; // Başlangıçta sıfır
+
+    const { error } = await supabaseClient.from('events').insert([eventPayload]);
+
+    submitBtn.innerHTML = originalText;
+    submitBtn.disabled = false;
+
+    if (error) {
+        // Eğer participants_count veya image_url kolonu DB'de henüz yoksa insert patlayabilir.
+        // Fallback: Eski tablo yapısıyla tekrar dene.
+        console.warn("Yeni kolonlarla ekleme başarısız, eski formata dönülüyor...", error);
+        const fallbackPayload = { title: title, description: fullDesc, date: isoDate };
+        const { error: fallbackError } = await supabaseClient.from('events').insert([fallbackPayload]);
+        
+        if (fallbackError) {
+            showToast("Yetki Hatası: Etkinlik eklenemedi! Sadece yönetici işlem yapabilir.", "error");
+        } else {
+            successAdd(dateStr);
+        }
+    } else {
+        successAdd(dateStr);
+    }
+}
+
+function successAdd(dateStr) {
+    showToast('Etkinlik başarıyla yayınlandı!', 'success');
+    document.getElementById('quickAddForm').reset();
+    document.getElementById('addDate').value = getLocalIsoDate(new Date()); // tarihi bugüne sıfırla
+    toggleAdminForm();
+    
+    APP_STATE.selectedDate = dateStr; 
+    // Eklenen etkinliğin tarihini görünür kılmak için başlangıç tarihini güncelle
+    APP_STATE.calendarStartDate = new Date(dateStr);
+    renderDays();
+    fetchEvents();
+}
+
+async function deleteEvent(id, title) {
+    if (!confirm(`"${title}" etkinliğini kalıcı olarak silmek istediğinize emin misiniz?`)) return;
+
+    const card = document.getElementById(`event-card-${id}`);
+    if (card) card.style.opacity = '0.5';
+
+    const { error } = await supabaseClient.from('events').delete().eq('id', id);
+    
+    if (error) {
+        if (card) card.style.opacity = '1';
+        showToast("Silinemedi: Sadece yönetici etkinlik silebilir.", "error");
+    } else {
+        const idx = APP_STATE.joinedEvents.indexOf(id);
+        if (idx > -1) {
+            APP_STATE.joinedEvents.splice(idx, 1);
+            saveJoinedEvents();
+        }
+        showToast('Etkinlik veritabanından silindi.', 'success');
+        fetchEvents();
+    }
+}
+
 
 // ==========================================
 // 7. ARAYÜZ (UI) OLUŞTURUCULARI & RENDER (Yıllık Takvim Entegresi)
@@ -974,12 +1086,4 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
-}
-function openKvkkModal(e) {
-    if (e) e.preventDefault();
-    document.getElementById('kvkkModal').classList.remove('hidden');
-}
-
-function closeKvkkModal() {
-    document.getElementById('kvkkModal').classList.add('hidden');
 }
