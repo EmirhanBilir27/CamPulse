@@ -19,6 +19,7 @@ let ADMIN_EMAILS = [
     'emircicek73@gmail.com',
     'abdulsametisan177@gmail.com',
     'ma9034403@gmail.com',
+    'admin@gmail.com',
     'feyzafatallah71@gmail.com'
 ];
 
